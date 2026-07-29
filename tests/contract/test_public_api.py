@@ -27,6 +27,7 @@ def test_public_names_are_exactly_those_documented() -> None:
         "SpaceError",
         "StoreError",
         "StoreLockedError",
+        "SweepModule",
         "SweepPolicy",
         "Sweeper",
         "VecVar",

@@ -25,6 +25,7 @@ from .errors import (
     StoreLockedError,
     XsweepError,
 )
+from .module import SweepModule
 from .plan import Plan
 from .policy import SweepPolicy
 from .sweeper import Sweeper, sweep
@@ -40,6 +41,7 @@ __all__ = [
     "SpaceError",
     "StoreError",
     "StoreLockedError",
+    "SweepModule",
     "SweepPolicy",
     "Sweeper",
     "VecVar",
