@@ -18,6 +18,28 @@ conjunction is a non-goal: cheap, scalar-only, very many points, AND needing
 persistence. Serving it would need coalesced regions, which would coarsen
 resume granularity and the status variable.
 
+## The cost of one chunk per loop point
+
+The store chunk grid is one along every loop dim. That is what makes
+concurrent region writes safe with no coordination: two workers never touch
+the same chunk because they never share a point. The price is a per-point
+write cost, measured at roughly 5 ms on a developer workstation, most of it
+inside zarr rather than on the filesystem.
+
+At the target scale this is invisible: 1e4 points cost about a minute of
+bookkeeping against hours of engine time. It becomes the dominant cost in one
+case, and it is worth stating plainly: a large deduplicated map. A million
+pixels means a million chunks, so filling the duplicated positions costs a
+million chunk writes whatever the deduplication saved on calls. Measured on a
+3600-pixel map with 25 unique rows and a free callee, deduplication divides
+the calls by 144 and the wall time only by two.
+
+With a real engine the calls still dominate by orders of magnitude, so
+deduplication remains the right choice. But the absolute floor is set by the
+chunk grid, and lowering it means coalescing several loop points per chunk,
+which would coarsen resume granularity and the status variable. That trade is
+deliberately out of v0.
+
 ## Store and concurrency
 
 - **One store per sweep configuration.** A store carries a fingerprint of

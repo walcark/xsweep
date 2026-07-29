@@ -572,7 +572,10 @@ work.
   `/speckit-plan`.
 - Target scale of the persistent mode: around 1e4 loop points per sweep,
   with callees costing seconds to minutes each. One write region per loop
-  point is negligible at that ratio (a millisecond against ten seconds), and
+  point is negligible at that ratio (measured at about five milliseconds
+  against ten seconds; the first estimate of one millisecond was optimistic
+  by a factor of five, most of the cost sitting inside the array library
+  rather than on the filesystem), and
   the regime is bounded by physics anyway: 1e6 points at ten seconds each
   would run for months. Larger parameter grids (a 1e6-pixel map) reach that
   range through dedup. Cheap callees are served either by the `vec` clause,
