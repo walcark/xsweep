@@ -397,6 +397,15 @@ def _check_coherence(contract: Contract) -> None:
         if o.name in out_seen:
             raise ContractError(f"output {o.name!r} declared twice")
         out_seen.add(o.name)
+        # In a Dataset a variable sharing a dim's name IS that dim's
+        # coordinate, so the output and its own axis would collide in the
+        # store. Refuse now rather than fail at allocation.
+        if o.name in o.dims:
+            raise ContractError(
+                f"output {o.name!r} is also one of its own dims; a variable "
+                "cannot be its own coordinate. Rename the output, e.g. "
+                f"{o.name}_value({', '.join(o.dims)})"
+            )
 
     # '@ N' is the 1-D shorthand, so the name it carries must be both a
     # variable and an output dim. Without a space we cannot tell which of the

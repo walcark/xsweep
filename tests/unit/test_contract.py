@@ -27,12 +27,12 @@ def test_batching_a_reduced_dim_is_rejected() -> None:
     wl" from "wl is multi-dim", so the message names both readings.
     """
     with pytest.raises(ContractError, match="not among the declared output dims"):
-        Contract.parse("loop(aot) vec(wl @ 8) const(srf) -> band(band)")
+        Contract.parse("loop(aot) vec(wl @ 8) const(srf) -> band_int(band)")
 
 
 def test_whole_axis_over_a_reduced_dim_is_allowed() -> None:
     """Passing the whole axis to a reducing callable is the correct form."""
-    c = Contract.parse("loop(aot) vec(wl) const(srf) -> band(band)")
+    c = Contract.parse("loop(aot) vec(wl) const(srf) -> band_int(band)")
     assert c.vec[0].max_batch is None
 
 
@@ -64,3 +64,13 @@ def test_coerce_rejects_conflicting_versions() -> None:
     obj = Contract.parse("loop(a) -> out()", version="3")
     with pytest.raises(ContractError, match="declare it in one place only"):
         coerce(obj, version="4")
+
+
+def test_output_named_after_its_own_dim_is_rejected() -> None:
+    """In a Dataset such a variable would be its own coordinate.
+
+    Found by running a band-integration sweep: allocation collided in the
+    store, which is far too late for an error the contract can catch.
+    """
+    with pytest.raises(ContractError, match="its own dims"):
+        Contract.parse("loop(aot) vec(wl) const(srf) -> band(band)")

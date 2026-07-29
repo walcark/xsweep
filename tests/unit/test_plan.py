@@ -125,7 +125,7 @@ def test_undetermined_output_size_is_reported_not_probed() -> None:
     """An unknown size is announced, never discovered by calling."""
     calls: list[float] = []
 
-    @sweep("loop(a) -> band(band)")
+    @sweep("loop(a) -> band_int(band)")
     def f(a: float) -> xr.DataArray:
         calls.append(a)
         return xr.DataArray([a, a], dims="band")
