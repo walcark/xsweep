@@ -131,6 +131,12 @@ def resolve(*layers: SweepPolicy | None) -> ResolvedPolicy:
     for layer in layers:
         if layer is None:
             continue
+        if not isinstance(layer, SweepPolicy):
+            raise PolicyError(
+                f"policy must be a SweepPolicy, got {type(layer).__name__}. "
+                "Run configuration goes through policy=SweepPolicy(...), "
+                "while physics parameters are ordinary keyword arguments"
+            )
         for name, value in vars(layer).items():
             if value is not UNSET:
                 values[name] = value
