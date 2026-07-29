@@ -171,7 +171,7 @@ definition; a valid one produces results identical to the decorated function.
 **Purpose**: capabilities spanning every story: parallelism, store
 discipline, observability and plan inspection.
 
-- [ ] T054 [P] Implement the process executor in `src/xsweep/executors.py` over `ProcessPoolExecutor`, honouring `max_workers`, catching pickling failures and re-raising them naming the offending object (research R11)
+- [X] T054 [P] Implement the process executor in `src/xsweep/executors.py` over `ProcessPoolExecutor`, honouring `max_workers`, catching pickling failures and re-raising them naming the offending object (research R11)
 - [ ] T055 [P] Implement the optional dask executor behind a lazy import in `src/xsweep/executors.py`, so no core path imports dask
 - [ ] T056 Implement the store lock in `src/xsweep/store.py`: `xsweep-lock.json` created with `O_EXCL` holding pid, hostname, start time and plan digest, released by a context manager on normal exit and on SIGINT or SIGTERM, `StoreLockedError` naming the owner, `force_unlock` override; readers never take the lock (FR-033, FR-036)
 - [ ] T057 Implement structured logging in `src/xsweep/sweeper.py`: one debug event per work item, an info run summary with computed, cached, failed, skipped and elapsed, an explicit info line when no store is named stating that results are not persisted, and no handler configuration by the library (FR-027)
@@ -189,7 +189,7 @@ discipline, observability and plan inspection.
 **Purpose**: the invariants that must hold across everything, plus
 documentation.
 
-- [ ] T064 Write the sacred-property suite in `tests/property/test_policy_invariance.py`: bit-identical results parametrised over dedup on and off, several batch sizes, serial and process executors, and persistent versus store-less mode, so adding a policy field means adding a parameter rather than a test (FR-022, SC-003, constitution III)
+- [X] T064 Write the sacred-property suite in `tests/property/test_policy_invariance.py`: bit-identical results parametrised over dedup on and off, several batch sizes, serial and process executors, and persistent versus store-less mode, so adding a policy field means adding a parameter rather than a test (FR-022, SC-003, constitution III)
 - [ ] T065 [P] Write the fail-loudly suite in `tests/integration/test_fail_loudly.py` for quickstart scenario 11 and SC-005: one parametrised test walking every edge-case row whose v0 policy is to fail, each asserting the error arrives before the first call or at definition time, with a call counter proving it
 - [ ] T066 [P] Write the idiom tests in `tests/integration/test_idioms.py` for quickstart scenario 9: string and datetime64 axes, object dtype rejected pointing at the label idiom, `seed` carrier variable giving a non-zero standard deviation across `rep`, two versions stored separately and concatenated along an explicit axis
 - [ ] T067 [P] Write the memory-ceiling test in `tests/integration/test_memory_ceiling.py`: a sweep larger than the output memory completing with peak output-side memory bounded by one chunk (SC-008)
