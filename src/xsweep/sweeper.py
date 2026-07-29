@@ -24,6 +24,7 @@ from .dedup import unique_map
 from .delivery import assemble_args, normalise_return
 from .errors import PointFailed, PolicyError
 from .executors import build_executor
+from .lock import StoreLock
 from .plan import Plan, WorkItem, build_plan
 from .policy import ResolvedPolicy, SweepPolicy
 from .space import build_grid, validate_space
@@ -226,7 +227,7 @@ def _read_done_mask(
     """Return which points a previous run already completed."""
     from pathlib import Path
 
-    if policy.store is None or not Path(str(policy.store)).exists():
+    if policy.store is None or not (Path(str(policy.store)) / "zarr.json").exists():
         return None
     import zarr
 
@@ -242,7 +243,15 @@ def _read_done_mask(
 
 
 def _execute(plan: Plan, target: Sweeper) -> xr.Dataset:
-    """Run a plan and return its result."""
+    """Run a plan and return its result, holding the store lock throughout."""
+    if plan.policy.store is None:
+        return _run(plan, target)
+    with StoreLock(str(plan.policy.store), force=plan.policy.force_unlock):
+        return _run(plan, target)
+
+
+def _run(plan: Plan, target: Sweeper) -> xr.Dataset:
+    """Execute a plan against an already-locked store."""
     started = time.monotonic()
     runnable = [item for item in plan.work_items if item.runnable]
 

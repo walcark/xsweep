@@ -181,7 +181,9 @@ class Store:
         """Return the store at ``target`` if it already holds a sweep."""
         if not isinstance(target, str):
             return None
-        if not Path(target).exists():
+        # Presence of the group metadata, not of the directory: the write
+        # lock creates the directory before anything is allocated in it.
+        if not (Path(target) / "zarr.json").exists():
             return None
         try:
             group = zarr.open_group(target, mode="r+")
