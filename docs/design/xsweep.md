@@ -1,8 +1,8 @@
 # xsweep, design reference
 
-Status: design phase, 2026-07-27 (open questions resolved 2026-07-29). No
-code yet. This document consolidates the full design discussion (starting
-point: analysis of adjeff's internal `sweep` module,
+Status: v0 implemented, 2026-07-29 (design 2026-07-27, open questions
+resolved 2026-07-29). This document consolidates the full design
+discussion (starting point: analysis of adjeff's internal `sweep` module,
 `~/dev/current/adjeff/src/adjeff/sweep`).
 
 This document is the reference for WHY: rationale, worked examples, rejected
@@ -580,5 +580,26 @@ planner". The generic bookkeeping half IS xsweep; radtrans keeps the
 planner: engine-aware contract construction (programmatic `Contract`), e.g.
 folding the vza axis into a single uvspec `umu` line via `vec(vza, phi)`,
 wavelength batching via `vec(wl @ N)` aligned with `wavelength_grid_file`
-LUT strategies. radtrans' ROADMAP should be updated to depend on xsweep when
-xsweep reaches v0.
+LUT strategies.
+
+**Status as of 2026-07-29: xsweep has reached v0**, so radtrans no longer
+needs to plan a generic bookkeeping layer. Its `core/sweep.py` becomes a thin
+planner producing `Contract` objects, and the ROADMAP entry for phase 2
+should be rewritten accordingly. That change belongs to the radtrans
+repository and is left to its own commit.
+
+What a radtrans planner will build, concretely:
+
+```python
+Contract(
+    loop=(LoopVar("aot"), LoopVar("rh")),
+    vec=(VecVar("wl", max_batch=n_per_lut), VecVar("vza"), VecVar("phi")),
+    out=(OutVar("radiance", ("wl", "vza", "phi")),),
+    version=uvspec_version,
+)
+```
+
+Everything engine-aware stays there: which axes uvspec can fold into one
+invocation, how `wavelength_grid_file` bounds the batch size, and which
+binary version the results belong to. xsweep sees none of it, which is the
+whole point of the split.

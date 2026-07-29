@@ -138,12 +138,12 @@ tables whole.
 **Independent Test**: 20 wavelengths with max batch 8 produce batches of 8,
 8 and 4 reassembled in order; the const variable arrives whole every time.
 
-- [ ] T044 [US4] Implement batch division in `src/xsweep/plan.py`: per-dim slice lists from the contract `@ N` default and the policy `chunks` override, multiplying work items over the product of slices so multi-dim vec variables yield tiles (FR-010)
-- [ ] T045 [US4] Implement vec and const delivery in `src/xsweep/delivery.py`: vec variables sliced per the work item, const variables passed whole and never chunked
-- [ ] T046 [US4] Implement the reduced-dim batching rejection in `src/xsweep/contract.py`: a batch marker on a dim absent from every declared output is refused at definition with the catalogue message (FR-008, edge case 12)
-- [ ] T047 [US4] Implement the multi-dim `@ N` rejection in `src/xsweep/plan.py`: `@ N` on a vec variable that is not 1-D in the space fails, pointing at the dim-keyed policy form
-- [ ] T048 [P] [US4] Write batching unit tests in `tests/unit/test_batching.py`: exact batch sizes including a shorter last batch, tiles from the product of per-dim slices, whole axis when unannotated
-- [ ] T049 [P] [US4] Write integration tests in `tests/integration/test_batch_const.py` for quickstart scenario 4: batches of 8, 8, 4 reassembled in order, const whole in every call, reduced-dim batching rejected at decoration, multi-dim `@ N` rejected, two maps swept whole then tiled giving identical results
+- [X] T044 [US4] Implement batch division in `src/xsweep/plan.py`: per-dim slice lists from the contract `@ N` default and the policy `chunks` override, multiplying work items over the product of slices so multi-dim vec variables yield tiles (FR-010)
+- [X] T045 [US4] Implement vec and const delivery in `src/xsweep/delivery.py`: vec variables sliced per the work item, const variables passed whole and never chunked
+- [X] T046 [US4] Implement the reduced-dim batching rejection in `src/xsweep/contract.py`: a batch marker on a dim absent from every declared output is refused at definition with the catalogue message (FR-008, edge case 12)
+- [X] T047 [US4] Implement the multi-dim `@ N` rejection in `src/xsweep/plan.py`: `@ N` on a vec variable that is not 1-D in the space fails, pointing at the dim-keyed policy form
+- [X] T048 [P] [US4] Write batching unit tests in `tests/unit/test_batching.py`: exact batch sizes including a shorter last batch, tiles from the product of per-dim slices, whole axis when unannotated
+- [X] T049 [P] [US4] Write integration tests in `tests/integration/test_batch_const.py` for quickstart scenario 4: batches of 8, 8, 4 reassembled in order, const whole in every call, reduced-dim batching rejected at decoration, multi-dim `@ N` rejected, two maps swept whole then tiled giving identical results
 
 **Checkpoint**: stories 1 to 4 work independently.
 
@@ -172,15 +172,15 @@ definition; a valid one produces results identical to the decorated function.
 discipline, observability and plan inspection.
 
 - [X] T054 [P] Implement the process executor in `src/xsweep/executors.py` over `ProcessPoolExecutor`, honouring `max_workers`, catching pickling failures and re-raising them naming the offending object (research R11)
-- [ ] T055 [P] Implement the optional dask executor behind a lazy import in `src/xsweep/executors.py`, so no core path imports dask
-- [ ] T056 Implement the store lock in `src/xsweep/store.py`: `xsweep-lock.json` created with `O_EXCL` holding pid, hostname, start time and plan digest, released by a context manager on normal exit and on SIGINT or SIGTERM, `StoreLockedError` naming the owner, `force_unlock` override; readers never take the lock (FR-033, FR-036)
-- [ ] T057 Implement structured logging in `src/xsweep/sweeper.py`: one debug event per work item, an info run summary with computed, cached, failed, skipped and elapsed, an explicit info line when no store is named stating that results are not persisted, and no handler configuration by the library (FR-027)
-- [ ] T058 Implement `explain()` on `Sweeper` and `SweepModule` returning the `Plan` without calling the wrapped function, and the textual `Plan.__repr__` reporting every element required by FR-030
-- [ ] T059 Implement the plan honesty rules in `src/xsweep/plan.py`: an output size needing a probe is reported as undetermined and never probed, the unique-point count is announced as real work, and no duration is reported unless derived from timings recorded by a previous run on the same store, with that provenance stated (FR-031)
-- [ ] T060 Implement the probe call in `src/xsweep/sweeper.py`: at execution only, on the first work item that is neither done nor skipped, its result KEPT and written as a normal point; a fully skipped space with undeclared sizes fails clearly (research R9, edge case 3)
-- [ ] T061 Implement heterogeneous output detection in `src/xsweep/store.py`: a call returning a shape incompatible with the allocated store raises naming the work item and both shapes (edge case 2)
-- [ ] T062 [P] Write concurrency tests in `tests/integration/test_lock.py` for quickstart scenario 8: a second writing process failing within seconds naming the owner, `force_unlock` overriding, reading during a run succeeding, process-executor workers never sharing a chunk
-- [ ] T063 [P] Write plan tests in `tests/integration/test_explain.py` for quickstart scenario 6, SC-011: no call of the wrapped function, reported counts and shapes, undetermined size reported as such, the probe result kept (a one-point sweep leaves the counter at one), and the three costly misconfigurations visible
+- [X] T055 [P] Implement the optional dask executor behind a lazy import in `src/xsweep/executors.py`, so no core path imports dask
+- [X] T056 Implement the store lock in `src/xsweep/store.py`: `xsweep-lock.json` created with `O_EXCL` holding pid, hostname, start time and plan digest, released by a context manager on normal exit and on SIGINT or SIGTERM, `StoreLockedError` naming the owner, `force_unlock` override; readers never take the lock (FR-033, FR-036)
+- [X] T057 Implement structured logging in `src/xsweep/sweeper.py`: one debug event per work item, an info run summary with computed, cached, failed, skipped and elapsed, an explicit info line when no store is named stating that results are not persisted, and no handler configuration by the library (FR-027)
+- [X] T058 Implement `explain()` on `Sweeper` and `SweepModule` returning the `Plan` without calling the wrapped function, and the textual `Plan.__repr__` reporting every element required by FR-030
+- [X] T059 Implement the plan honesty rules in `src/xsweep/plan.py`: an output size needing a probe is reported as undetermined and never probed, the unique-point count is announced as real work, and no duration is reported unless derived from timings recorded by a previous run on the same store, with that provenance stated (FR-031)
+- [X] T060 Implement the probe call in `src/xsweep/sweeper.py`: at execution only, on the first work item that is neither done nor skipped, its result KEPT and written as a normal point; a fully skipped space with undeclared sizes fails clearly (research R9, edge case 3)
+- [X] T061 Implement heterogeneous output detection in `src/xsweep/store.py`: a call returning a shape incompatible with the allocated store raises naming the work item and both shapes (edge case 2)
+- [X] T062 [P] Write concurrency tests in `tests/integration/test_lock.py` for quickstart scenario 8: a second writing process failing within seconds naming the owner, `force_unlock` overriding, reading during a run succeeding, process-executor workers never sharing a chunk
+- [X] T063 [P] Write plan tests in `tests/integration/test_explain.py` for quickstart scenario 6, SC-011: no call of the wrapped function, reported counts and shapes, undetermined size reported as such, the probe result kept (a one-point sweep leaves the counter at one), and the three costly misconfigurations visible
 
 ---
 
@@ -190,17 +190,17 @@ discipline, observability and plan inspection.
 documentation.
 
 - [X] T064 Write the sacred-property suite in `tests/property/test_policy_invariance.py`: bit-identical results parametrised over dedup on and off, several batch sizes, serial and process executors, and persistent versus store-less mode, so adding a policy field means adding a parameter rather than a test (FR-022, SC-003, constitution III)
-- [ ] T065 [P] Write the fail-loudly suite in `tests/integration/test_fail_loudly.py` for quickstart scenario 11 and SC-005: one parametrised test walking every edge-case row whose v0 policy is to fail, each asserting the error arrives before the first call or at definition time, with a call counter proving it
-- [ ] T066 [P] Write the idiom tests in `tests/integration/test_idioms.py` for quickstart scenario 9: string and datetime64 axes, object dtype rejected pointing at the label idiom, `seed` carrier variable giving a non-zero standard deviation across `rep`, two versions stored separately and concatenated along an explicit axis
-- [ ] T067 [P] Write the memory-ceiling test in `tests/integration/test_memory_ceiling.py`: a sweep larger than the output memory completing with peak output-side memory bounded by one chunk (SC-008)
-- [ ] T068 [P] Write the overhead benchmark in `tests/integration/test_overhead.py`: on 1e4 loop points with a callee sleeping one second (scaled down with a documented factor for CI), library overhead under 1% of wall time (SC-009)
-- [ ] T069 [P] Write the adjeff-shape validation in `tests/integration/test_adjeff_shape.py` for quickstart scenario 10: an adjeff sampler expressed with its existing point-function signature unchanged (SC-007)
-- [ ] T070 [P] Write the worked-examples coverage test in `tests/integration/test_worked_examples.py`: the nine expressible examples of design doc section 8 declared as contracts and planned without library changes (SC-006)
-- [ ] T071 [P] Write `docs/idioms.md` documenting the two mandated idioms: the seed carrier variable for replication (FR-025) and one store per version with explicit concatenation for version comparison (FR-028), each with a runnable snippet
-- [ ] T072 [P] Write `docs/limitations.md` from the FR-026 index, one section per limitation, each pointing at the requirement that states it rather than restating it
-- [ ] T073 [P] Write the README usage section and audit the public docstrings, ensuring every public name carries a NumPy imperative docstring in English
-- [ ] T074 Update `docs/design/xsweep.md` section 13 and the radtrans ROADMAP reference so radtrans depends on xsweep at v0
-- [ ] T075 Run the full quickstart validation and `pixi run -e dev all`, then record any deviation in the spec rather than in code comments
+- [X] T065 [P] Write the fail-loudly suite in `tests/integration/test_fail_loudly.py` for quickstart scenario 11 and SC-005: one parametrised test walking every edge-case row whose v0 policy is to fail, each asserting the error arrives before the first call or at definition time, with a call counter proving it
+- [X] T066 [P] Write the idiom tests in `tests/integration/test_idioms.py` for quickstart scenario 9: string and datetime64 axes, object dtype rejected pointing at the label idiom, `seed` carrier variable giving a non-zero standard deviation across `rep`, two versions stored separately and concatenated along an explicit axis
+- [X] T067 [P] Write the memory-ceiling test in `tests/integration/test_memory_ceiling.py`: a sweep larger than the output memory completing with peak output-side memory bounded by one chunk (SC-008)
+- [X] T068 [P] Write the overhead benchmark in `tests/integration/test_overhead.py`: on 1e4 loop points with a callee sleeping one second (scaled down with a documented factor for CI), library overhead under 1% of wall time (SC-009)
+- [X] T069 [P] Write the adjeff-shape validation in `tests/integration/test_adjeff_shape.py` for quickstart scenario 10: an adjeff sampler expressed with its existing point-function signature unchanged (SC-007)
+- [X] T070 [P] Write the worked-examples coverage test in `tests/integration/test_worked_examples.py`: the nine expressible examples of design doc section 8 declared as contracts and planned without library changes (SC-006)
+- [X] T071 [P] Write `docs/idioms.md` documenting the two mandated idioms: the seed carrier variable for replication (FR-025) and one store per version with explicit concatenation for version comparison (FR-028), each with a runnable snippet
+- [X] T072 [P] Write `docs/limitations.md` from the FR-026 index, one section per limitation, each pointing at the requirement that states it rather than restating it
+- [X] T073 [P] Write the README usage section and audit the public docstrings, ensuring every public name carries a NumPy imperative docstring in English
+- [X] T074 Update `docs/design/xsweep.md` section 13 and the radtrans ROADMAP reference so radtrans depends on xsweep at v0
+- [X] T075 Run the full quickstart validation and `pixi run -e dev all`, then record any deviation in the spec rather than in code comments
 
 ---
 
