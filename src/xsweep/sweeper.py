@@ -293,17 +293,17 @@ def _run(plan: Plan, target: Sweeper) -> xr.Dataset:
                 outcome.error,
             )
             continue
-        data = _placed(plan, outcome)
-        store.write(_region(plan, outcome.item), data)
+        store.write(_region(plan, outcome.item), _placed(plan, outcome))
         store.set_status(outcome.item.point_index, OK)
-        for mirror in outcome.item.mirrors:
-            # A deduplicated point holds the same values by construction, so
-            # it is written rather than recomputed. Dedup saves calls, which
-            # are the expensive part, not writes.
-            store.write(_region_at(plan, mirror, outcome.item), data)
-            store.set_status(mirror, OK)
         n_ok += 1
         logger.debug("point ok index=%s", outcome.item.point_index)
+
+    # Unconditional: a run that resumes with every representative already
+    # computed still has duplicated points to fill, and skipping the pass
+    # would hand back a result full of holes.
+    if plan.source_of is not None:
+        store.expand(plan.source_of)
+        store.expand_status(plan.source_of)
 
     store.finalise()
     logger.info(
@@ -388,14 +388,12 @@ def _region_at(plan: Plan, index: tuple[int, ...], item: WorkItem) -> dict[str, 
 
 
 def _placed(plan: Plan, outcome: Outcome) -> xr.Dataset:
-    """Give a call output the loop dims it must carry to be written.
+    """Return the call output as the store expects it.
 
-    Every coordinate is dropped first. The store already holds them from
-    allocation, and a coordinate that a call carried back would otherwise be
-    written outside the region it belongs to.
+    The loop dims are NOT added here: the store places the values itself by
+    reshaping into its own selection, which avoids an xarray round trip on
+    every point. Coordinates are dropped because the store already holds
+    them from allocation.
     """
     assert outcome.data is not None
-    data = outcome.data.drop_vars(list(outcome.data.coords), errors="ignore")
-    for dim in reversed(plan.loop_dims):
-        data = data.expand_dims(dim)
-    return data
+    return outcome.data.drop_vars(list(outcome.data.coords), errors="ignore")

@@ -39,6 +39,10 @@ STATUS_LABELS = {PENDING: "pending", OK: "ok", FAILED: "failed", SKIPPED: "skipp
 
 _META_KEY = "xsweep_meta"
 
+#: Memory ceiling for one expansion slab. Not a policy field: it never
+#: changes a result, and principle II says not to grow the surface for that.
+_EXPAND_BUDGET = 64 * 1024 * 1024
+
 
 def fingerprint(contract: Contract, statics: Mapping[str, Any]) -> str:
     """Compute the identity of a sweep configuration.
@@ -278,21 +282,119 @@ class Store:
             Slice per dim, covering exactly one work item.
         data
             The normalised call output, already carrying the loop dims.
+
+        Notes
+        -----
+        Values go straight into the zarr arrays rather than through
+        ``Dataset.to_zarr(region=...)``. The xarray path re-validates and
+        re-encodes the whole dataset on every call, which measured about ten
+        milliseconds per point: at the target scale that is the entire
+        overhead budget spent on bookkeeping. A sweep writes one region per
+        point, thousands of times, so this path has to be thin.
         """
-        try:
-            data.to_zarr(self.group.store, region=dict(region))
-        except Exception as exc:  # noqa: BLE001 - surfaced with context
-            raise StoreError(
-                f"cannot write region {dict(region)!r}: {exc}. This usually "
-                "means a call returned a shape incompatible with the "
-                "allocated store, which the contract must declare"
-            ) from exc
+        dims_of = {spec.name: spec.dims for spec in self.plan.result}
+        for name, var in data.data_vars.items():
+            array = self.group[str(name)]
+            assert isinstance(array, zarr.Array)
+            dims = dims_of.get(str(name), tuple(str(d) for d in var.dims))
+            selection = tuple(region.get(dim, slice(None)) for dim in dims)
+            target = tuple(
+                len(range(*sel.indices(size)))
+                for sel, size in zip(selection, array.shape, strict=True)
+            )
+            # The call output carries only the call dims; the loop dims are
+            # length one in the target, so a reshape places it without any
+            # xarray round trip.
+            values = np.asarray(var.values).reshape(target)
+            try:
+                array[selection] = values
+            except (ValueError, IndexError) as exc:
+                expected = tuple(
+                    array.shape[i]
+                    if dims[i] not in region
+                    else region[dims[i]].stop - region[dims[i]].start
+                    for i in range(len(dims))
+                )
+                raise StoreError(
+                    f"cannot write {name!r} at region {dict(region)!r}: the "
+                    f"call returned shape {values.shape} where the store "
+                    f"expects {expected}. Every call must return the same "
+                    "shape, which the contract declares"
+                ) from exc
 
     def set_status(self, index: tuple[int, ...], code: int) -> None:
         """Record the outcome of one loop point."""
         array = self.group["status"]
         assert isinstance(array, zarr.Array)
         array[index if index else ()] = np.uint8(code)
+
+    def expand(
+        self, source_of: np.ndarray[tuple[int, ...], np.dtype[np.int64]]
+    ) -> None:
+        """Copy each representative's values onto the points it stands for.
+
+        Parameters
+        ----------
+        source_of
+            Flat array over the loop grid holding, for every point, the flat
+            index of the representative that was actually computed.
+
+        Notes
+        -----
+        Deduplication saves CALLS, but a naive expansion would give back
+        every millisecond it saved: writing a million duplicate pixels one
+        region at a time costs more than the calls it avoided. So the copy
+        happens here, in slabs, once the sweep is done.
+
+        Slabs are sized from a memory budget rather than from a point count,
+        because one expanded row is as wide as the output's call dims: a
+        scalar output makes rows of eight bytes, a hundred-channel spectrum
+        makes them a hundred times bigger. A fixed point count would swing
+        the memory cost by two orders of magnitude between contracts.
+
+        This runs while the write lock is held, with no concurrent writer, so
+        a slab spanning several store chunks is safe: the one-point-per-chunk
+        grid exists for concurrency, which does not apply here.
+        """
+        loop_shape = tuple(axis.size for axis in self.plan.axes)
+        if not loop_shape or source_of.size == 0:
+            return
+
+        sources = np.asarray(source_of, dtype=np.int64).reshape(-1)
+        representatives = np.unique(sources)
+        rank = np.searchsorted(representatives, sources)
+        rows, rest = loop_shape[0], int(np.prod(loop_shape[1:], dtype=np.int64))
+
+        for spec in self.plan.result:
+            array = self.group[spec.name]
+            assert isinstance(array, zarr.Array)
+            call_shape = tuple(array.shape[len(loop_shape) :])
+            row_items = int(np.prod(call_shape, dtype=np.int64)) if call_shape else 1
+            row_bytes = row_items * array.dtype.itemsize
+
+            # The representatives are the deduplicated result: holding them
+            # is holding exactly what the user asked for by enabling dedup.
+            table = np.empty((representatives.size, *call_shape), array.dtype)
+            for position, flat in enumerate(representatives):
+                where = tuple(int(i) for i in np.unravel_index(int(flat), loop_shape))
+                table[position] = array[where]
+
+            per_slab = max(1, int(_EXPAND_BUDGET // max(rest * row_bytes, 1)))
+            for start in range(0, rows, per_slab):
+                stop = min(start + per_slab, rows)
+                block = rank[start * rest : stop * rest]
+                array[start:stop] = table[block].reshape(
+                    (stop - start, *loop_shape[1:], *call_shape)
+                )
+
+    def expand_status(
+        self, source_of: np.ndarray[tuple[int, ...], np.dtype[np.int64]]
+    ) -> None:
+        """Give duplicated points the status of their representative."""
+        array = self.group["status"]
+        assert isinstance(array, zarr.Array)
+        codes = np.asarray(array[...], dtype=np.uint8).reshape(-1)
+        array[...] = codes[source_of].reshape(array.shape)
 
     def read_status(self) -> np.ndarray[tuple[int, ...], np.dtype[np.uint8]]:
         """Return the status array, used for resume and for progress."""

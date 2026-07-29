@@ -119,6 +119,7 @@ class Plan:
     grid: LoopGrid
     space: xr.Dataset
     statics: Mapping[str, Any]
+    source_of: np.ndarray[tuple[int, ...], np.dtype[np.int64]] | None = None
 
     @property
     def loop_dims(self) -> tuple[str, ...]:
@@ -205,6 +206,7 @@ def build_plan(
     )
     result = _result_spec(contract, space, grid)
     store = _store_spec(policy, result, grid.dims, batches, items)
+    source_of = _source_map(grid, items) if unique_of is not None else None
     return Plan(
         contract=contract,
         policy=policy,
@@ -220,7 +222,25 @@ def build_plan(
         grid=grid,
         space=space,
         statics=dict(statics),
+        source_of=source_of,
     )
+
+
+def _source_map(
+    grid: LoopGrid, items: Sequence[WorkItem]
+) -> np.ndarray[tuple[int, ...], np.dtype[np.int64]]:
+    """Map every loop point to the flat index of the point standing for it.
+
+    Duplicated points are not computed and not written during the sweep; this
+    is what the final expansion pass reads to fill them in one go.
+    """
+    flat = np.arange(grid.n_points, dtype=np.int64).reshape(grid.shape)
+    source = flat.copy()
+    for item in items:
+        origin = int(flat[item.point_index]) if item.point_index else 0
+        for mirror in item.mirrors:
+            source[mirror] = origin
+    return source.reshape(-1)
 
 
 def _batch_slices(
