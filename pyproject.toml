@@ -1,0 +1,71 @@
+[project]
+name = "xsweep"
+version = "0.1.0"
+description = "Minimal, content-agnostic parameter sweeps for xarray."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Kevin Walcarius", email = "kevin.walcarius@gmail.com" }]
+dependencies = [
+    "numpy",
+    "xarray",
+    "zarr>=3",
+]
+
+# Dask is an executor backend only. No core path imports it.
+[project.optional-dependencies]
+dask = ["dask"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# --- pixi -------------------------------------------------------------------
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[tool.pixi.pypi-dependencies]
+xsweep = { path = ".", editable = true }
+
+# Dev/runtime env pinned to 3.12 (numpy's typed stubs need 3.12+ to type-check);
+# the library itself still targets 3.11+ (see requires-python and ruff target).
+[tool.pixi.dependencies]
+python = "3.12.*"
+numpy = "*"
+xarray = "*"
+zarr = ">=3"
+
+[tool.pixi.feature.dev.dependencies]
+ruff = "*"
+mypy = ">=1.5"
+pytest = "*"
+
+[tool.pixi.feature.dev.tasks]
+fmt = "ruff format ."
+fmt-check = "ruff format --check ."
+lint = "ruff check src tests"
+type-check = "mypy src"
+test = "pytest -q"
+all = { depends-on = ["fmt", "lint", "type-check", "test"] }
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
+
+# --- tooling ----------------------------------------------------------------
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+exclude = [".pixi"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
