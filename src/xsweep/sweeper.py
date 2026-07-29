@@ -19,6 +19,7 @@ import xarray as xr
 
 from . import policy as policy_mod
 from .contract import Contract, coerce
+from .dedup import unique_map
 from .delivery import assemble_args, normalise_return
 from .errors import PointFailed
 from .executors import build_executor
@@ -137,6 +138,13 @@ class Sweeper:
         policy_mod.validate(resolved, available_dims=tuple(map(str, space.sizes)))
         grid = build_grid(space, self.contract)
         done_mask = _read_done_mask(self.contract, resolved, grid.shape, statics)
+
+        unique_of = None
+        n_unique = None
+        if resolved.dedup:
+            dims = resolved.dedup if isinstance(resolved.dedup, tuple) else None
+            unique_of, n_unique = unique_map(grid, dims)
+
         return build_plan(
             contract=self.contract,
             policy=resolved,
@@ -144,6 +152,8 @@ class Sweeper:
             grid=grid,
             statics=statics,
             done_mask=done_mask,
+            unique_of=unique_of,
+            n_unique=n_unique,
         )
 
 
@@ -246,8 +256,15 @@ def _execute(plan: Plan, func: Callable[..., Any]) -> xr.Dataset:
                 outcome.error,
             )
             continue
-        store.write(_region(plan, outcome.item), _placed(plan, outcome))
+        data = _placed(plan, outcome)
+        store.write(_region(plan, outcome.item), data)
         store.set_status(outcome.item.point_index, OK)
+        for mirror in outcome.item.mirrors:
+            # A deduplicated point holds the same values by construction, so
+            # it is written rather than recomputed. Dedup saves calls, which
+            # are the expensive part, not writes.
+            store.write(_region_at(plan, mirror, outcome.item), data)
+            store.set_status(mirror, OK)
         n_ok += 1
         logger.debug("point ok index=%s", outcome.item.point_index)
 
@@ -322,9 +339,13 @@ def _arrays_for(plan: Plan, item: WorkItem) -> dict[str, xr.DataArray]:
 
 def _region(plan: Plan, item: WorkItem) -> dict[str, slice]:
     """Return the store region one work item owns."""
+    return _region_at(plan, item.point_index, item)
+
+
+def _region_at(plan: Plan, index: tuple[int, ...], item: WorkItem) -> dict[str, slice]:
+    """Return the store region at one grid position, with the item's batch."""
     region = {
-        dim: slice(pos, pos + 1)
-        for dim, pos in zip(plan.loop_dims, item.point_index, strict=True)
+        dim: slice(pos, pos + 1) for dim, pos in zip(plan.loop_dims, index, strict=True)
     }
     region.update(item.slices)
     return region

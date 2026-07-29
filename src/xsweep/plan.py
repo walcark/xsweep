@@ -44,6 +44,10 @@ class WorkItem:
         Already satisfied by the store, so execution skips it silently.
     skipped
         Excluded by the skip predicate, so it is never called.
+    mirrors
+        Other grid positions sharing this representative under dedup. Their
+        values are copies of this one, so execution writes them without
+        calling the function again.
     """
 
     point_index: tuple[int, ...]
@@ -51,6 +55,7 @@ class WorkItem:
     slices: Mapping[str, slice] = field(default_factory=dict)
     done: bool = False
     skipped: bool = False
+    mirrors: tuple[tuple[int, ...], ...] = ()
 
     @property
     def runnable(self) -> bool:
@@ -287,9 +292,22 @@ def _work_items(
     for dim in dims:
         combos = [{**combo, dim: sl} for combo in combos for sl in batches[dim]]
 
-    seen_unique: set[int] = set()
+    mirrors_of: dict[tuple[int, ...], list[tuple[int, ...]]] = {}
+    representative: dict[int, tuple[int, ...]] = {}
+    if unique_of is not None:
+        for index in grid.indices():
+            code = int(unique_of[index]) if index else int(unique_of[()])
+            if code not in representative:
+                representative[code] = index
+                mirrors_of[index] = []
+            elif representative[code] != index:
+                mirrors_of[representative[code]].append(index)
+
     items: list[WorkItem] = []
     for index in grid.indices():
+        if unique_of is not None and index not in mirrors_of:
+            continue
+
         skipped = False
         if policy.skip_where is not None:
             skipped = bool(policy.skip_where(grid.values_at(index)))
@@ -297,9 +315,6 @@ def _work_items(
         unique_index: int | None = None
         if unique_of is not None:
             unique_index = int(unique_of[index]) if index else int(unique_of[()])
-            if unique_index in seen_unique:
-                continue
-            seen_unique.add(unique_index)
 
         done = bool(done_mask[index]) if done_mask is not None else False
         for combo in combos:
@@ -310,6 +325,7 @@ def _work_items(
                     slices=dict(combo),
                     done=done,
                     skipped=skipped,
+                    mirrors=tuple(mirrors_of.get(index, ())),
                 )
             )
     return tuple(items)
