@@ -100,13 +100,13 @@ exactly, and per-point status is always inspectable.
 `status=failed` there and `ok` elsewhere; relaunching recomputes only the
 failed and missing points.
 
-- [ ] T032 [US2] Implement the error policy in `src/xsweep/sweeper.py`: `on_error="nan"` writes a NaN slice, sets status failed and continues; `on_error="raise"` aborts with the original exception surfaced as `PointFailed`
-- [ ] T033 [US2] Implement the retry count in `src/xsweep/sweeper.py`: up to `retries` attempts per work item before marking it failed, each attempt logged
-- [ ] T034 [US2] Implement the skip predicate in `src/xsweep/plan.py`: `skip_where` evaluated per point during planning and carried on the work item, so skipped points are never called; no automatic NaN-skip (research R3, FR-019)
-- [ ] T035 [US2] Implement resume in `src/xsweep/plan.py`: work items already `ok` in the store are marked done, so an identical re-run performs zero calls (SC-001), and everything not `ok` is recomputed
-- [ ] T036 [US2] Implement space-change detection in `src/xsweep/store.py`: compare the stored space signature with the current one and refuse with a message naming the differing dim or coordinate (FR-017, edge case 9)
-- [ ] T037 [P] [US2] Write integration tests in `tests/integration/test_failure_resume.py` for quickstart scenario 2: failing subset yields NaN and failed status while the sweep completes, relaunch recomputes only what is not ok, interruption mid-run then relaunch recomputes exactly the missing points, `on_error="raise"` surfaces the original error, extended axis refused
-- [ ] T038 [P] [US2] Write unit tests in `tests/unit/test_error_policy.py`: retries exhausted marks failed, a retry that succeeds marks ok, `skip_where` never calls the function, NaN loop values are NOT skipped by default
+- [X] T032 [US2] Implement the error policy in `src/xsweep/sweeper.py`: `on_error="nan"` writes a NaN slice, sets status failed and continues; `on_error="raise"` aborts with the original exception surfaced as `PointFailed`
+- [X] T033 [US2] Implement the retry count in `src/xsweep/sweeper.py`: up to `retries` attempts per work item before marking it failed, each attempt logged
+- [X] T034 [US2] Implement the skip predicate in `src/xsweep/plan.py`: `skip_where` evaluated per point during planning and carried on the work item, so skipped points are never called; no automatic NaN-skip (research R3, FR-019)
+- [X] T035 [US2] Implement resume in `src/xsweep/plan.py`: work items already `ok` in the store are marked done, so an identical re-run performs zero calls (SC-001), and everything not `ok` is recomputed
+- [X] T036 [US2] Implement space-change detection in `src/xsweep/store.py`: compare the stored space signature with the current one and refuse with a message naming the differing dim or coordinate (FR-017, edge case 9)
+- [X] T037 [P] [US2] Write integration tests in `tests/integration/test_failure_resume.py` for quickstart scenario 2: failing subset yields NaN and failed status while the sweep completes, relaunch recomputes only what is not ok, interruption mid-run then relaunch recomputes exactly the missing points, `on_error="raise"` surfaces the original error, extended axis refused
+- [X] T038 [P] [US2] Write unit tests in `tests/unit/test_error_policy.py`: retries exhausted marks failed, a retry that succeeds marks ok, `skip_where` never calls the function, NaN loop values are NOT skipped by default
 
 **Checkpoint**: stories 1 and 2 both work independently.
 
@@ -120,11 +120,11 @@ with a bit-identical result.
 **Independent Test**: sweep a map with known duplicates with and without
 dedup; identical results, call count equal to the unique row count.
 
-- [ ] T039 [US3] Implement unique-row reduction in `src/xsweep/dedup.py` using per-column factorisation then unique rows on the integer codes (research R4), stripping coordinate labels before broadcasting to avoid label alignment
-- [ ] T040 [US3] Implement expansion in `src/xsweep/dedup.py`: map results computed on unique rows back onto the full loop grid
-- [ ] T041 [US3] Wire dedup into the work-item stream in `src/xsweep/plan.py`: `dedup=True` covers all loop dims, a tuple covers the named subset, each item carries its unique representative, the unique count enters the plan, unknown dims fail before any call
-- [ ] T042 [P] [US3] Write dedup unit tests in `tests/unit/test_dedup.py`: mixed dtypes including strings, NaN semantics pinned, partial dims leaving `time` fully swept, round trip reduce then expand being the identity
-- [ ] T043 [P] [US3] Write integration tests in `tests/integration/test_dedup_map.py` for quickstart scenario 3: unique call count, result equality with the non-dedup run, unknown dim failing with the available-dims listing
+- [X] T039 [US3] Implement unique-row reduction in `src/xsweep/dedup.py` using per-column factorisation then unique rows on the integer codes (research R4), stripping coordinate labels before broadcasting to avoid label alignment
+- [X] T040 [US3] Implement expansion in `src/xsweep/dedup.py`: map results computed on unique rows back onto the full loop grid
+- [X] T041 [US3] Wire dedup into the work-item stream in `src/xsweep/plan.py`: `dedup=True` covers all loop dims, a tuple covers the named subset, each item carries its unique representative, the unique count enters the plan, unknown dims fail before any call
+- [X] T042 [P] [US3] Write dedup unit tests in `tests/unit/test_dedup.py`: mixed dtypes including strings, NaN semantics pinned, partial dims leaving `time` fully swept, round trip reduce then expand being the identity
+- [X] T043 [P] [US3] Write integration tests in `tests/integration/test_dedup_map.py` for quickstart scenario 3: unique call count, result equality with the non-dedup run, unknown dim failing with the available-dims listing
 
 **Checkpoint**: stories 1 to 3 work independently.
 
@@ -157,10 +157,10 @@ definition.
 **Independent Test**: a subclass with a bad contract fails at class
 definition; a valid one produces results identical to the decorated function.
 
-- [ ] T050 [US5] Implement `SweepModule` in `src/xsweep/module.py`: `__init_subclass__` validating the class-level contract at import with the `abstract=True` escape hatch, contract inherited and overridable, policy taken at instantiation
-- [ ] T051 [US5] Implement `__call__`, `explain` and the `forward` contract in `src/xsweep/module.py`, keeping orchestration in `__call__` and pure physics in `forward`, and export `SweepModule` from `src/xsweep/__init__.py`
-- [ ] T052 [P] [US5] Write module tests in `tests/contract/test_module.py` for quickstart scenario 5: missing contract failing at class definition, `abstract=True` silent, contract inheritance and override, `forward` testable in isolation
-- [ ] T053 [P] [US5] Write equivalence tests in `tests/integration/test_surface_equivalence.py`: a module and the equivalent decorated function producing identical results for the same space, statics and policy (FR-023)
+- [X] T050 [US5] Implement `SweepModule` in `src/xsweep/module.py`: `__init_subclass__` validating the class-level contract at import with the `abstract=True` escape hatch, contract inherited and overridable, policy taken at instantiation
+- [X] T051 [US5] Implement `__call__`, `explain` and the `forward` contract in `src/xsweep/module.py`, keeping orchestration in `__call__` and pure physics in `forward`, and export `SweepModule` from `src/xsweep/__init__.py`
+- [X] T052 [P] [US5] Write module tests in `tests/contract/test_module.py` for quickstart scenario 5: missing contract failing at class definition, `abstract=True` silent, contract inheritance and override, `forward` testable in isolation
+- [X] T053 [P] [US5] Write equivalence tests in `tests/integration/test_surface_equivalence.py`: a module and the equivalent decorated function producing identical results for the same space, statics and policy (FR-023)
 
 **Checkpoint**: all five user stories work independently.
 
