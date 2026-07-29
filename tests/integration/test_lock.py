@@ -15,7 +15,7 @@ import xarray as xr
 
 from xsweep import SweepPolicy, sweep
 from xsweep.errors import StoreLockedError
-from xsweep.lock import LOCK_NAME, StoreLock
+from xsweep.lock import LOCK_SUFFIX, StoreLock
 
 
 @sweep("loop(a, b) -> out()", version="1")
@@ -63,7 +63,7 @@ def test_the_lock_is_released_after_a_successful_run(
     """A finished run must leave the store usable by the next one."""
     store = tmp_path / "s.zarr"
     _f(cartesian_space, policy=SweepPolicy(store=str(store)))
-    assert not (store / LOCK_NAME).exists()
+    assert not store.with_name(store.name + LOCK_SUFFIX).exists()
 
 
 def test_the_lock_is_released_even_when_the_run_raises(
@@ -78,7 +78,7 @@ def test_the_lock_is_released_even_when_the_run_raises(
     store = tmp_path / "s.zarr"
     with pytest.raises(Exception, match="engine blew up"):
         boom(cartesian_space, policy=SweepPolicy(store=str(store), on_error="raise"))
-    assert not (store / LOCK_NAME).exists()
+    assert not store.with_name(store.name + LOCK_SUFFIX).exists()
 
 
 def test_reading_is_never_blocked(tmp_path, cartesian_space: xr.Dataset) -> None:
@@ -92,11 +92,19 @@ def test_reading_is_never_blocked(tmp_path, cartesian_space: xr.Dataset) -> None
         assert np.isfinite(ds.out.values).all()
 
 
+def test_the_lock_sits_beside_the_store_not_inside_it(tmp_path) -> None:
+    """A stray file inside a zarr directory makes every open warn."""
+    store = tmp_path / "s.zarr"
+    with StoreLock(store):
+        assert store.with_name(store.name + LOCK_SUFFIX).exists()
+        assert not (store / "xsweep-lock.json").exists()
+
+
 def test_the_lock_file_records_its_owner(tmp_path) -> None:
     """The payload is what the refusal message reads back."""
     store = tmp_path / "s.zarr"
     with StoreLock(store):
-        meta = json.loads((store / LOCK_NAME).read_text())
+        meta = json.loads(store.with_name(store.name + LOCK_SUFFIX).read_text())
     assert {"pid", "host", "since"} <= set(meta)
 
 

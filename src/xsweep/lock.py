@@ -26,9 +26,9 @@ from typing import Any
 
 from .errors import StoreLockedError
 
-__all__ = ["LOCK_NAME", "StoreLock"]
+__all__ = ["LOCK_SUFFIX", "StoreLock"]
 
-LOCK_NAME = "xsweep-lock.json"
+LOCK_SUFFIX = ".lock"
 
 
 class StoreLock:
@@ -43,7 +43,10 @@ class StoreLock:
     """
 
     def __init__(self, root: str | Path, *, force: bool = False) -> None:
-        self.path = Path(root) / LOCK_NAME
+        # Beside the store, not inside it: a stray file in a zarr
+        # directory makes every open warn about an unrecognised component.
+        root = Path(root)
+        self.path = root.with_name(root.name + LOCK_SUFFIX)
         self.force = force
         self._held = False
         self._previous: Any = None
@@ -70,7 +73,7 @@ class StoreLock:
             fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         except FileExistsError as exc:
             raise StoreLockedError(
-                f"{self.path.parent} is being written by another run "
+                f"{self.path.with_suffix('')} is being written by another run "
                 f"({self._owner()}). Wait for it to finish, or pass "
                 "force_unlock=True if that run is dead"
             ) from exc

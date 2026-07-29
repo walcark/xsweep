@@ -17,6 +17,7 @@ therefore imports dask, which must stay optional.
 from __future__ import annotations
 
 import json
+import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass
 from hashlib import blake2b
@@ -42,6 +43,19 @@ _META_KEY = "xsweep_meta"
 #: Memory ceiling for one expansion slab. Not a policy field: it never
 #: changes a result, and principle II says not to grow the surface for that.
 _EXPAND_BUDGET = 64 * 1024 * 1024
+
+
+def _consolidate(store: Any) -> None:
+    """Consolidate store metadata, without zarr's notice about its own feature.
+
+    Consolidated metadata is not in the zarr v3 specification, and zarr says
+    so on every call. That is a deliberate choice here, not something a user
+    of this library can act on, so the notice is silenced at the call site
+    rather than left to pollute every run.
+    """
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=".*[Cc]onsolidated metadata.*")
+        zarr.consolidate_metadata(store)
 
 
 def fingerprint(contract: Contract, statics: Mapping[str, Any]) -> str:
@@ -177,7 +191,7 @@ class Store:
             "space_signature": signature,
             "chunks": dict(plan.store.chunks) if plan.store else {},
         }
-        zarr.consolidate_metadata(group.store)
+        _consolidate(group.store)
         return cls(zarr.open_group(target, mode="r+"), plan, plan.loop_dims)
 
     @staticmethod
@@ -404,7 +418,7 @@ class Store:
 
     def finalise(self) -> None:
         """Consolidate metadata so later opens are fast and quiet."""
-        zarr.consolidate_metadata(self.group.store)
+        _consolidate(self.group.store)
 
     def result(self, *, load: bool) -> xr.Dataset:
         """Return the sweep result.
