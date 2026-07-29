@@ -263,7 +263,7 @@ class Store:
             "status",
             shape=loop_shape,
             dtype="uint8",
-            chunks=tuple(1 for _ in loop_shape) or (1,),
+            chunks=tuple(1 for _ in loop_shape),
             dimension_names=plan.loop_dims,
             fill_value=PENDING,
         )
