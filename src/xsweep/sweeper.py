@@ -1,0 +1,341 @@
+"""The sweeper: plan, then execute the plan.
+
+The two phases are separate on purpose. Planning decides everything and calls
+nothing; execution consumes the plan and calls the function. That is what
+lets a user inspect exactly what will run, and guarantees the report cannot
+diverge from the run.
+"""
+
+from __future__ import annotations
+
+import logging
+import time
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from typing import Any
+
+import numpy as np
+import xarray as xr
+
+from . import policy as policy_mod
+from .contract import Contract, coerce
+from .delivery import assemble_args, normalise_return
+from .errors import PointFailed
+from .executors import build_executor
+from .plan import Plan, WorkItem, build_plan
+from .policy import ResolvedPolicy, SweepPolicy
+from .space import build_grid, validate_space
+from .store import FAILED, OK, SKIPPED, Store
+
+__all__ = ["Sweeper", "sweep"]
+
+logger = logging.getLogger("xsweep")
+
+
+@dataclass
+class Outcome:
+    """What one call produced, or why it did not."""
+
+    item: WorkItem
+    data: xr.Dataset | None
+    error: BaseException | None = None
+
+
+class Sweeper:
+    """Bind a contract and a default policy around a callable.
+
+    Parameters
+    ----------
+    contract
+        The contract describing one call, as a string or an object.
+    func
+        The callable to lift.
+    policy
+        Decorator-level defaults, overridable per instance and per call.
+    version
+        Physics revision, when the contract is given as a string.
+    """
+
+    def __init__(
+        self,
+        contract: str | Contract,
+        func: Callable[..., Any],
+        policy: SweepPolicy | None = None,
+        *,
+        version: str = "0",
+    ) -> None:
+        self.contract = coerce(contract, version=version)
+        self.func = func
+        self.policy = policy
+        self.__doc__ = func.__doc__
+        self.__name__ = getattr(func, "__name__", "sweep")
+
+    def explain(
+        self,
+        space: xr.Dataset,
+        /,
+        *,
+        policy: SweepPolicy | None = None,
+        **statics: Any,
+    ) -> Plan:
+        """Resolve the sweep and stop, without calling the function once.
+
+        Parameters
+        ----------
+        space
+            The Dataset describing the whole sweep.
+        policy
+            Call-level policy overrides.
+        **statics
+            Configuration forwarded to every call.
+
+        Returns
+        -------
+        Plan
+            The resolved plan, ready to inspect.
+        """
+        return self._plan(space, policy=policy, statics=statics)
+
+    def __call__(
+        self,
+        space: xr.Dataset,
+        /,
+        *,
+        policy: SweepPolicy | None = None,
+        **statics: Any,
+    ) -> xr.Dataset:
+        """Plan the sweep, then execute it.
+
+        Parameters
+        ----------
+        space
+            The Dataset describing the whole sweep.
+        policy
+            Call-level policy overrides.
+        **statics
+            Configuration forwarded to every call.
+
+        Returns
+        -------
+        xr.Dataset
+            The declared outputs plus the ``status`` sidecar variable.
+        """
+        plan = self._plan(space, policy=policy, statics=statics)
+        return _execute(plan, self.func)
+
+    def _plan(
+        self,
+        space: xr.Dataset,
+        *,
+        policy: SweepPolicy | None,
+        statics: Mapping[str, Any],
+    ) -> Plan:
+        """Validate everything, then resolve the plan."""
+        policy_mod.check_static_names(statics)
+        resolved = policy_mod.resolve(self.policy, policy)
+        validate_space(space, self.contract)
+        policy_mod.validate(resolved, available_dims=tuple(map(str, space.sizes)))
+        grid = build_grid(space, self.contract)
+        done_mask = _read_done_mask(self.contract, resolved, grid.shape, statics)
+        return build_plan(
+            contract=self.contract,
+            policy=resolved,
+            space=space,
+            grid=grid,
+            statics=statics,
+            done_mask=done_mask,
+        )
+
+
+def sweep(
+    contract: str | Contract,
+    *,
+    version: str = "0",
+    **policy_fields: Any,
+) -> Callable[[Callable[..., Any]], Sweeper]:
+    """Lift a point function into a sweep.
+
+    Parameters
+    ----------
+    contract
+        The contract describing one call. Parsed immediately, so a malformed
+        contract raises at import rather than after minutes of runs.
+    version
+        Physics revision; bump it whenever the computation changes for
+        reasons xsweep cannot observe.
+    **policy_fields
+        Decorator-level policy defaults.
+
+    Returns
+    -------
+    callable
+        A decorator producing a :class:`Sweeper`.
+    """
+    defaults = SweepPolicy(**policy_fields) if policy_fields else None
+
+    def decorate(func: Callable[..., Any]) -> Sweeper:
+        return Sweeper(contract, func, defaults, version=version)
+
+    return decorate
+
+
+def _read_done_mask(
+    contract: Contract,
+    policy: ResolvedPolicy,
+    shape: tuple[int, ...],
+    statics: Mapping[str, Any],
+) -> np.ndarray[tuple[int, ...], np.dtype[np.bool_]] | None:
+    """Return which points a previous run already completed."""
+    from pathlib import Path
+
+    if policy.store is None or not Path(str(policy.store)).exists():
+        return None
+    import zarr
+
+    group = zarr.open_group(str(policy.store), mode="r")
+    if "status" not in group:
+        return None
+    array = group["status"]
+    assert isinstance(array, zarr.Array)
+    status = np.asarray(array[...], dtype=np.uint8)
+    if status.shape != shape:
+        return None
+    return np.equal(status, OK)
+
+
+def _execute(plan: Plan, func: Callable[..., Any]) -> xr.Dataset:
+    """Run a plan and return its result."""
+    started = time.monotonic()
+    runnable = [item for item in plan.work_items if item.runnable]
+
+    sizes: dict[str, int] = {}
+    probe: Outcome | None = None
+    if not plan.determined and runnable:
+        # The store cannot be allocated before the output shape is known, and
+        # the callee costs minutes, so the probe result is kept, not discarded.
+        probe = _call(plan, func, runnable[0])
+        if probe.data is not None:
+            sizes.update({str(d): int(n) for d, n in probe.data.sizes.items()})
+
+    store = Store.open_or_create(plan, sizes=sizes)
+    if plan.policy.store is None:
+        logger.info(
+            "sweep runs in memory: results are not persisted and no cache was consulted"
+        )
+    logger.info(
+        "sweep start points=%d calls=%d cached=%d skipped=%d",
+        plan.n_points,
+        plan.n_calls,
+        plan.n_cached,
+        plan.n_skipped,
+    )
+
+    for item in plan.work_items:
+        if item.skipped:
+            store.set_status(item.point_index, SKIPPED)
+
+    n_ok = n_failed = 0
+    outcomes = _stream(plan, func, runnable, probe)
+    for outcome in outcomes:
+        if outcome.data is None:
+            n_failed += 1
+            store.set_status(outcome.item.point_index, FAILED)
+            logger.debug(
+                "point failed index=%s error=%s",
+                outcome.item.point_index,
+                outcome.error,
+            )
+            continue
+        store.write(_region(plan, outcome.item), _placed(plan, outcome))
+        store.set_status(outcome.item.point_index, OK)
+        n_ok += 1
+        logger.debug("point ok index=%s", outcome.item.point_index)
+
+    store.finalise()
+    logger.info(
+        "sweep done ok=%d failed=%d skipped=%d cached=%d elapsed=%.1fs",
+        n_ok,
+        n_failed,
+        plan.n_skipped,
+        plan.n_cached,
+        time.monotonic() - started,
+    )
+    return store.result(load=plan.policy.load or plan.policy.store is None)
+
+
+def _stream(
+    plan: Plan,
+    func: Callable[..., Any],
+    runnable: list[WorkItem],
+    probe: Outcome | None,
+) -> list[Outcome]:
+    """Dispatch the runnable items, reusing the probe result if there was one."""
+    if probe is not None:
+        rest = runnable[1:]
+    else:
+        rest = runnable
+
+    executor = build_executor(plan.policy.executor, max_workers=plan.policy.max_workers)
+    results = [
+        outcome
+        for _, outcome in executor.map_unordered(
+            lambda item: _call(plan, func, item), rest
+        )
+    ]
+    return ([probe] if probe is not None else []) + results
+
+
+def _call(plan: Plan, func: Callable[..., Any], item: WorkItem) -> Outcome:
+    """Invoke the wrapped function for one work item, honouring the policy."""
+    args = assemble_args(
+        plan.contract,
+        loop_values=plan.grid.values_at(item.point_index),
+        arrays=_arrays_for(plan, item),
+        statics=plan.statics,
+    )
+    attempts = plan.policy.retries + 1
+    last: BaseException | None = None
+    for _ in range(attempts):
+        try:
+            return Outcome(item, normalise_return(func(**args), plan.contract))
+        except Exception as exc:  # noqa: BLE001 - policy decides what happens
+            last = exc
+    if plan.policy.on_error == "raise":
+        raise PointFailed(
+            f"call failed at point {item.point_index} after {attempts} "
+            f"attempt(s): {last}"
+        ) from last
+    return Outcome(item, None, last)
+
+
+def _arrays_for(plan: Plan, item: WorkItem) -> dict[str, xr.DataArray]:
+    """Slice the vec variables for this item; const variables pass whole."""
+    arrays: dict[str, xr.DataArray] = {}
+    for var in plan.contract.vec:
+        array = plan.space[var.name]
+        selection = {dim: sl for dim, sl in item.slices.items() if dim in array.dims}
+        arrays[var.name] = array.isel(selection) if selection else array
+    for name in plan.contract.const:
+        arrays[name] = plan.space[name]
+    return arrays
+
+
+def _region(plan: Plan, item: WorkItem) -> dict[str, slice]:
+    """Return the store region one work item owns."""
+    region = {
+        dim: slice(pos, pos + 1)
+        for dim, pos in zip(plan.loop_dims, item.point_index, strict=True)
+    }
+    region.update(item.slices)
+    return region
+
+
+def _placed(plan: Plan, outcome: Outcome) -> xr.Dataset:
+    """Give a call output the loop dims it must carry to be written."""
+    assert outcome.data is not None
+    data = outcome.data
+    for dim in reversed(plan.loop_dims):
+        data = data.expand_dims(dim)
+    return data.drop_vars(
+        [c for c in data.coords if c not in data.dims], errors="ignore"
+    )
