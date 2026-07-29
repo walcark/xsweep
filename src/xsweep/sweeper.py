@@ -8,6 +8,7 @@ diverge from the run.
 
 from __future__ import annotations
 
+import functools
 import logging
 import time
 from collections.abc import Callable, Mapping
@@ -21,7 +22,7 @@ from . import policy as policy_mod
 from .contract import Contract, coerce
 from .dedup import unique_map
 from .delivery import assemble_args, normalise_return
-from .errors import PointFailed
+from .errors import PointFailed, PolicyError
 from .executors import build_executor
 from .plan import Plan, WorkItem, build_plan
 from .policy import ResolvedPolicy, SweepPolicy
@@ -70,6 +71,18 @@ class Sweeper:
         self.policy = policy
         self.__doc__ = func.__doc__
         self.__name__ = getattr(func, "__name__", "sweep")
+        self.__module__ = getattr(func, "__module__", __name__)
+        self.__qualname__ = getattr(func, "__qualname__", self.__name__)
+
+    def __reduce__(self) -> tuple[Any, ...]:
+        """Pickle by reference, which is what the process executor needs.
+
+        The decorator rebinds the module-level name to this object, so the
+        wrapped function is no longer reachable by its own qualified name.
+        Sending the sweeper by reference lets a worker re-import the module
+        and find the very same object, function included.
+        """
+        return _lookup, (self.__module__, self.__qualname__)
 
     def explain(
         self,
@@ -122,7 +135,7 @@ class Sweeper:
             The declared outputs plus the ``status`` sidecar variable.
         """
         plan = self._plan(space, policy=policy, statics=statics)
-        return _execute(plan, self.func)
+        return _execute(plan, self)
 
     def _plan(
         self,
@@ -155,6 +168,21 @@ class Sweeper:
             unique_of=unique_of,
             n_unique=n_unique,
         )
+
+
+def _lookup(module: str, qualname: str) -> Sweeper:
+    """Re-import a sweeper by name, for unpickling in a worker process."""
+    import importlib
+
+    obj: Any = importlib.import_module(module)
+    for part in qualname.split("."):
+        obj = getattr(obj, part)
+    if not isinstance(obj, Sweeper):
+        raise PolicyError(
+            f"{module}.{qualname} is not a sweeper; the process executor "
+            "needs the decorated function to be reachable at module level"
+        )
+    return obj
 
 
 def sweep(
@@ -213,7 +241,7 @@ def _read_done_mask(
     return np.equal(status, OK)
 
 
-def _execute(plan: Plan, func: Callable[..., Any]) -> xr.Dataset:
+def _execute(plan: Plan, target: Sweeper) -> xr.Dataset:
     """Run a plan and return its result."""
     started = time.monotonic()
     runnable = [item for item in plan.work_items if item.runnable]
@@ -223,7 +251,7 @@ def _execute(plan: Plan, func: Callable[..., Any]) -> xr.Dataset:
     if not plan.determined and runnable:
         # The store cannot be allocated before the output shape is known, and
         # the callee costs minutes, so the probe result is kept, not discarded.
-        probe = _call(plan, func, runnable[0])
+        probe = _call(plan, target, runnable[0])
         if probe.data is not None:
             sizes.update({str(d): int(n) for d, n in probe.data.sizes.items()})
 
@@ -245,7 +273,7 @@ def _execute(plan: Plan, func: Callable[..., Any]) -> xr.Dataset:
             store.set_status(item.point_index, SKIPPED)
 
     n_ok = n_failed = 0
-    outcomes = _stream(plan, func, runnable, probe)
+    outcomes = _stream(plan, target, runnable, probe)
     for outcome in outcomes:
         if outcome.data is None:
             n_failed += 1
@@ -282,7 +310,7 @@ def _execute(plan: Plan, func: Callable[..., Any]) -> xr.Dataset:
 
 def _stream(
     plan: Plan,
-    func: Callable[..., Any],
+    target: Sweeper,
     runnable: list[WorkItem],
     probe: Outcome | None,
 ) -> list[Outcome]:
@@ -293,16 +321,14 @@ def _stream(
         rest = runnable
 
     executor = build_executor(plan.policy.executor, max_workers=plan.policy.max_workers)
-    results = [
-        outcome
-        for _, outcome in executor.map_unordered(
-            lambda item: _call(plan, func, item), rest
-        )
-    ]
+    # A partial rather than a closure: a lambda cannot be pickled, so the
+    # process executor would reject every sweep before running a single one.
+    call = functools.partial(_call, plan, target)
+    results = [outcome for _, outcome in executor.map_unordered(call, rest)]
     return ([probe] if probe is not None else []) + results
 
 
-def _call(plan: Plan, func: Callable[..., Any], item: WorkItem) -> Outcome:
+def _call(plan: Plan, target: Sweeper, item: WorkItem) -> Outcome:
     """Invoke the wrapped function for one work item, honouring the policy."""
     args = assemble_args(
         plan.contract,
@@ -314,7 +340,8 @@ def _call(plan: Plan, func: Callable[..., Any], item: WorkItem) -> Outcome:
     last: BaseException | None = None
     for _ in range(attempts):
         try:
-            return Outcome(item, normalise_return(func(**args), plan.contract))
+            data = normalise_return(target.func(**args), plan.contract)
+            return Outcome(item, data)
         except Exception as exc:  # noqa: BLE001 - policy decides what happens
             last = exc
     if plan.policy.on_error == "raise":
@@ -352,11 +379,14 @@ def _region_at(plan: Plan, index: tuple[int, ...], item: WorkItem) -> dict[str, 
 
 
 def _placed(plan: Plan, outcome: Outcome) -> xr.Dataset:
-    """Give a call output the loop dims it must carry to be written."""
+    """Give a call output the loop dims it must carry to be written.
+
+    Every coordinate is dropped first. The store already holds them from
+    allocation, and a coordinate that a call carried back would otherwise be
+    written outside the region it belongs to.
+    """
     assert outcome.data is not None
-    data = outcome.data
+    data = outcome.data.drop_vars(list(outcome.data.coords), errors="ignore")
     for dim in reversed(plan.loop_dims):
         data = data.expand_dims(dim)
-    return data.drop_vars(
-        [c for c in data.coords if c not in data.dims], errors="ignore"
-    )
+    return data
