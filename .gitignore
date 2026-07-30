@@ -1,6 +1,5 @@
 # pixi
 .pixi/
-pixi.lock
 
 # python
 __pycache__/
