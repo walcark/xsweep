@@ -9,6 +9,102 @@ same `host`; they say nothing across different machines.
 
 | Case | Version | Date | Host | Calls | Wall time (s) |
 |---|---|---|---|---|---|
+| 01_beer_lambert_transmission | 0.3.0 | 2026-07-30 | fedora | 500 | 0.0671 |
+| 02_rayleigh_optical_depth_spectrum | 0.3.0 | 2026-07-30 | fedora | 20 | 0.0536 |
+| 03_pixel_map_dedup_atmospheric_correction | 0.3.0 | 2026-07-30 | fedora | 6 | 0.0514 |
+| 04_band_integration_srf | 0.3.0 | 2026-07-30 | fedora | 80 | 0.2073 |
+| 05_single_scattering_toa_reflectance | 0.3.0 | 2026-07-30 | fedora | 27000 | 2.7931 |
+| 06_henyey_greenstein_phase_function | 0.3.0 | 2026-07-30 | fedora | 48 | 0.0501 |
+| 07_hyperspectral_cube_memory_scaling_dedup | 0.3.0 | 2026-07-30 | fedora | 8 | 0.0632 |
+| 07_hyperspectral_cube_memory_scaling_no_dedup | 0.3.0 | 2026-07-30 | fedora | 6400 | 15.3704 |
+| 08_monte_carlo_seed_ensemble | 0.3.0 | 2026-07-30 | fedora | 300 | 0.0597 |
+| 09_sweepmodule_lut_process_executor | 0.3.0 | 2026-07-30 | fedora | 1600 | 2.6506 |
+| 10_resume_after_interruption_full | 0.3.0 | 2026-07-30 | fedora | 900 | 2.0570 |
+| 10_resume_after_interruption_resume | 0.3.0 | 2026-07-30 | fedora | 90 | 0.2424 |
 
 ## History
+
+### 01_beer_lambert_transmission
+
+| Version | Date | Host | Calls | Wall time (s) |
+|---|---|---|---|---|
+| 0.3.0 | 2026-07-30 | fedora | 500 | 0.0712 |
+| 0.3.0 | 2026-07-30 | fedora | 500 | 0.0671 |
+
+### 02_rayleigh_optical_depth_spectrum
+
+| Version | Date | Host | Calls | Wall time (s) |
+|---|---|---|---|---|
+| 0.3.0 | 2026-07-30 | fedora | 20 | 0.0559 |
+| 0.3.0 | 2026-07-30 | fedora | 20 | 0.0536 |
+
+### 03_pixel_map_dedup_atmospheric_correction
+
+| Version | Date | Host | Calls | Wall time (s) |
+|---|---|---|---|---|
+| 0.3.0 | 2026-07-30 | fedora | 6 | 0.0486 |
+| 0.3.0 | 2026-07-30 | fedora | 6 | 0.0514 |
+
+### 04_band_integration_srf
+
+| Version | Date | Host | Calls | Wall time (s) |
+|---|---|---|---|---|
+| 0.3.0 | 2026-07-30 | fedora | 80 | 0.2020 |
+| 0.3.0 | 2026-07-30 | fedora | 80 | 0.2073 |
+
+### 05_single_scattering_toa_reflectance
+
+| Version | Date | Host | Calls | Wall time (s) |
+|---|---|---|---|---|
+| 0.3.0 | 2026-07-30 | fedora | 27000 | 2.7407 |
+| 0.3.0 | 2026-07-30 | fedora | 27000 | 2.7931 |
+
+### 06_henyey_greenstein_phase_function
+
+| Version | Date | Host | Calls | Wall time (s) |
+|---|---|---|---|---|
+| 0.3.0 | 2026-07-30 | fedora | 48 | 0.0492 |
+| 0.3.0 | 2026-07-30 | fedora | 48 | 0.0501 |
+
+### 07_hyperspectral_cube_memory_scaling_dedup
+
+| Version | Date | Host | Calls | Wall time (s) |
+|---|---|---|---|---|
+| 0.3.0 | 2026-07-30 | fedora | 8 | 0.0754 |
+| 0.3.0 | 2026-07-30 | fedora | 8 | 0.0632 |
+
+### 07_hyperspectral_cube_memory_scaling_no_dedup
+
+| Version | Date | Host | Calls | Wall time (s) |
+|---|---|---|---|---|
+| 0.3.0 | 2026-07-30 | fedora | 6400 | 16.5274 |
+| 0.3.0 | 2026-07-30 | fedora | 6400 | 15.3704 |
+
+### 08_monte_carlo_seed_ensemble
+
+| Version | Date | Host | Calls | Wall time (s) |
+|---|---|---|---|---|
+| 0.3.0 | 2026-07-30 | fedora | 300 | 0.0626 |
+| 0.3.0 | 2026-07-30 | fedora | 300 | 0.0597 |
+
+### 09_sweepmodule_lut_process_executor
+
+| Version | Date | Host | Calls | Wall time (s) |
+|---|---|---|---|---|
+| 0.3.0 | 2026-07-30 | fedora | 1600 | 2.5467 |
+| 0.3.0 | 2026-07-30 | fedora | 1600 | 2.6506 |
+
+### 10_resume_after_interruption_full
+
+| Version | Date | Host | Calls | Wall time (s) |
+|---|---|---|---|---|
+| 0.3.0 | 2026-07-30 | fedora | 900 | 2.0766 |
+| 0.3.0 | 2026-07-30 | fedora | 900 | 2.0570 |
+
+### 10_resume_after_interruption_resume
+
+| Version | Date | Host | Calls | Wall time (s) |
+|---|---|---|---|---|
+| 0.3.0 | 2026-07-30 | fedora | 90 | 0.2382 |
+| 0.3.0 | 2026-07-30 | fedora | 90 | 0.2424 |
 

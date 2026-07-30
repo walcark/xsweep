@@ -11,3 +11,4 @@ the concepts; this site is worked examples with real numbers.
    :maxdepth: 1
 
    auto_examples/index
+   benchmarks
