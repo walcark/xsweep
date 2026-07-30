@@ -78,13 +78,32 @@ class Sweeper:
         self.__qualname__ = getattr(func, "__qualname__", self.__name__)
 
     def __reduce__(self) -> tuple[Any, ...]:
-        """Pickle by reference, which is what the process executor needs.
+        """Pickle by reference for a function, by value for a bound method.
 
-        The decorator rebinds the module-level name to this object, so the
-        wrapped function is no longer reachable by its own qualified name.
-        Sending the sweeper by reference lets a worker re-import the module
-        and find the very same object, function included.
+        The decorator rebinds a plain function's module-level name to this
+        Sweeper, so the wrapped function is no longer reachable by its own
+        qualified name; sending the sweeper by reference lets a worker
+        re-import the module and find the very same object, function
+        included.
+
+        A bound method (``SweepModule.forward``) has no such problem, and a
+        by-reference lookup would in fact land on the unbound function on
+        the class, losing exactly the instance state built in ``__init__``
+        that is the reason to use the class facade. A bound method already
+        pickles correctly through its instance, so this reconstructs
+        through the constructor instead.
         """
+        if hasattr(self.func, "__self__"):
+            return (
+                _rebuild,
+                (
+                    self.contract,
+                    self.func,
+                    self.policy,
+                    self.contract.version,
+                    self.__name__,
+                ),
+            )
         return _lookup, (self.__module__, self.__qualname__)
 
     def explain(
@@ -187,6 +206,22 @@ def _lookup(module: str, qualname: str) -> Sweeper:
             "needs the decorated function to be reachable at module level"
         )
     return obj
+
+
+def _rebuild(
+    contract: Contract,
+    func: Callable[..., Any],
+    policy: SweepPolicy | None,
+    version: str,
+    name: str,
+) -> Sweeper:
+    """Reconstruct a sweeper wrapping a bound method, for unpickling.
+
+    ``func`` here is a bound method, already unpickled with its own instance
+    state intact by the time this runs; wiring it back into a fresh Sweeper
+    is all that is left to do.
+    """
+    return Sweeper(contract, func, policy, version=version, name=name)
 
 
 def sweep(

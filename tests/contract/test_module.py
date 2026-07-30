@@ -25,6 +25,25 @@ class Rho(SweepModule):
         return aot * 100 + rh
 
 
+class RhoWithState(SweepModule):
+    """A module carrying __init__-built state, at module level on purpose.
+
+    The process executor needs the class importable by qualname to unpickle
+    a bound method's instance; a class defined inside a test function would
+    not be reachable that way.
+    """
+
+    contract = "loop(a) -> out()"
+
+    def __init__(self, policy: SweepPolicy | None = None, offset: float = 0.0) -> None:
+        super().__init__(policy)
+        self.offset = offset
+
+    def forward(self, a: float) -> float:
+        """Use the instance state, so a lost offset changes the result."""
+        return a * 2.0 + self.offset
+
+
 def test_missing_contract_fails_at_class_definition() -> None:
     """The error arrives at import, which is the whole point."""
     with pytest.raises(ContractError, match="declares no 'contract'"):
@@ -97,3 +116,16 @@ def test_call_level_policy_overrides_the_instance(map_space: xr.Dataset) -> None
     module = Rho(SweepPolicy(dedup=True))
     plan = module.explain(map_space, policy=SweepPolicy(dedup=False))
     assert plan.n_unique is None
+
+
+def test_instance_state_survives_the_process_executor() -> None:
+    """The class facade's whole point: __init__-built state, even in a worker.
+
+    A bound method used to pickle by reference (module.Class.method), which
+    resolves to the unbound function, not this instance's state, and broke
+    the whole worker pool. It must now reach the worker with `offset` intact.
+    """
+    space = xr.Dataset({"a": ("a", [1.0, 2.0, 3.0])})
+    module = RhoWithState(SweepPolicy(executor="process"), offset=100.0)
+    result = module(space)
+    assert np.array_equal(result.out.values, [102.0, 104.0, 106.0])
