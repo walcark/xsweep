@@ -164,6 +164,28 @@ removed outright for a multi-output contract rather than kept as a
 still-available foot-gun. Single-output contracts are unaffected: there is
 nothing to swap with one value.
 
+### 13. Auto-sizing a vec batch turned out not to need store persistence (2026-07-30)
+
+The design doc's own note on automatic `vec`/call-dim batch sizing assumed
+it would have to "decide once, persist the choice in the store and reuse it
+on resume, because batch size determines the store's call-dim chunk width".
+Implementing `chunks={"wl": "auto"}` (a memory-budget width for an
+explicitly named dim, mirroring `store_chunks`) surfaced that this
+assumption does not hold: resuming a sweep already requires an identical
+space and contract (checked at open time), and the sizing function
+(`_vec_batch_width`) is pure given those, so it reproduces the same width
+on every run without anything needing to persist. The same reasoning had
+already been checked for dedup's row grouping; it generalises here for the
+same underlying reason (a pure function of already-verified-invariant
+inputs is reproducible by construction, not by bookkeeping).
+
+A first version of the sizing function undercounted: it added a flat 8
+bytes per element of the batched dim for each output touching it, ignoring
+that an output's OTHER dims multiply that cost (`spectrum(wl, extra)` with
+`extra` of size 1000 costs 8000 bytes per `wl` element, not 8). A worked
+example with a 20,000-element axis caught it: the undercounted version
+picked one batch (the whole axis), the corrected version three.
+
 ## Measurements that corrected the specification
 
 ### The per-point cost was five times the estimate

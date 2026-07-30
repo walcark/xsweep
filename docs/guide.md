@@ -152,6 +152,11 @@ purpose:
 The knobs that matter once a sweep gets big:
 
 - `chunks={"wl": 500}` overrides a `vec` batch size, keyed by dim.
+  `chunks={"wl": "auto"}` batches it too, sized from a memory budget instead
+  of a number you pick yourself; the dim still has to be named, since only
+  you know whether your function is safe to run on pieces of that axis (a
+  convolution or a moving average is not, even when its output has the same
+  shape as its input).
 - `store_chunks={"y": 256}` sizes the store's loop-dim chunk grid; by
   default it is sized from a memory budget, not exposed unless you need to
   override it.

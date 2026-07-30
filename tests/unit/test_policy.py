@@ -58,6 +58,8 @@ def test_in_memory_is_derived_from_store() -> None:
     ("policy", "fragment"),
     [
         (SweepPolicy(chunks={"z": 4}), "chunks names dim 'z'"),
+        (SweepPolicy(chunks={"y": 0}), "chunks\\['y'\\] must be 'auto' or an int"),
+        (SweepPolicy(chunks={"y": "soon"}), "chunks\\['y'\\] must be 'auto' or an int"),
         (SweepPolicy(dedup=("z",)), "dedup names dim 'z'"),
         (SweepPolicy(retries=-1), "retries must be >= 0"),
         (SweepPolicy(max_workers=0), "max_workers must be >= 1"),

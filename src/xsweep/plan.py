@@ -299,7 +299,7 @@ def _batch_slices(
                 "over it, so batching would corrupt the result. Remove it "
                 "from chunks to pass the whole axis in one call"
             )
-        sizes[dim] = size
+        sizes[dim] = _vec_batch_width(dim, contract, space) if size == "auto" else size
 
     out: dict[str, tuple[slice, ...]] = {}
     for dim, size in sizes.items():
@@ -308,6 +308,47 @@ def _batch_slices(
             slice(start, min(start + size, total)) for start in range(0, total, size)
         )
     return out
+
+
+#: Memory ceiling for one batched call's vec arguments plus its output,
+#: same role and value as _LOOP_CHUNK_BUDGET: a cost knob, not a policy
+#: field, since it never changes a result.
+_VEC_BATCH_BUDGET = 64 * 1024 * 1024
+
+
+def _vec_batch_width(dim: str, contract: Contract, space: xr.Dataset) -> int:
+    """Pick a batch width for an explicitly-named dim, from a memory budget.
+
+    Counts the vec variables that carry this dim, at their real dtype (known
+    upfront, since they are already arrays in the space), plus every
+    declared output whose dims include it, at an assumed 8 bytes (its actual
+    dtype is unknown before the first call, the same assumption VarSpec
+    defaults to elsewhere). Both are scaled by the size of their OTHER dims:
+    one element along the batched dim of a (wl, band) array is a whole
+    band-sized row, not one scalar. The dim must already have passed the
+    reduced-dim check by the time this runs, so every output counted here is
+    one the function actually produces at this width, not one it reduces
+    away.
+    """
+    total = int(space.sizes[dim])
+    bytes_per_element = 0
+    for var in contract.vec:
+        if var.name not in space or dim not in map(str, space[var.name].dims):
+            continue
+        row = 1
+        for other in map(str, space[var.name].dims):
+            if other != dim:
+                row *= int(space.sizes[other])
+        bytes_per_element += row * space[var.name].dtype.itemsize
+    for out in contract.out:
+        if dim not in out.dims:
+            continue
+        row = 1
+        for other in out.dims:
+            if other != dim:
+                row *= int(space.sizes[other]) if other in space.sizes else 1
+        bytes_per_element += row * 8
+    return min(total, max(1, _VEC_BATCH_BUDGET // max(bytes_per_element, 1)))
 
 
 def _work_items(

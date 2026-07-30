@@ -172,6 +172,54 @@ def test_store_chunks_on_a_non_loop_dim_is_rejected() -> None:
         f.explain(space, policy=SweepPolicy(store_chunks={"wl": 2}))
 
 
+def test_auto_batch_width_fits_the_whole_axis_when_it_is_small() -> None:
+    """The safe default stays the default: small axes are never split."""
+
+    @sweep("loop(a) vec(wl) -> t(wl)")
+    def f(a: float, wl: xr.DataArray) -> xr.DataArray:
+        return wl * a
+
+    space = xr.Dataset({"a": ("a", [1.0]), "wl": ("wl", np.arange(20.0))})
+    plan = f.explain(space, policy=SweepPolicy(chunks={"wl": "auto"}))
+    assert plan.batches["wl"] == (slice(0, 20),)
+
+
+def test_auto_batch_width_accounts_for_every_other_dim() -> None:
+    """One element along the batched dim is a whole row of the other dims."""
+
+    @sweep("loop(a) vec(wl) -> spectrum(wl, extra)")
+    def f(a: float, wl: xr.DataArray) -> np.ndarray:
+        extra = 1000
+        return np.broadcast_to((wl * a).values[:, None], (wl.sizes["wl"], extra)).copy()
+
+    space = xr.Dataset(
+        {
+            "a": ("a", [1.0]),
+            "wl": ("wl", np.arange(20000.0)),
+            "extra": ("extra", np.arange(1000.0)),
+        }
+    )
+    plan = f.explain(space, policy=SweepPolicy(chunks={"wl": "auto"}))
+    widths = {sl.stop - sl.start for sl in plan.batches["wl"]}
+    # 8 bytes (wl input) + 1000 * 8 bytes (spectrum's extra dim) per element;
+    # a naive per-element estimate that ignored `extra` would fit in one call.
+    assert len(plan.batches["wl"]) > 1
+    assert max(widths) < 20000
+
+
+def test_auto_batch_never_changes_the_result() -> None:
+    """Auto sizing is a cost decision like any chunks value: same values out."""
+
+    @sweep("loop(a) vec(wl) -> t(wl)")
+    def f(a: float, wl: xr.DataArray) -> xr.DataArray:
+        return wl * a
+
+    space = xr.Dataset({"a": ("a", [2.0]), "wl": ("wl", np.arange(500.0))})
+    whole = f(space)
+    auto = f(space, policy=SweepPolicy(chunks={"wl": "auto"}))
+    assert np.array_equal(whole.t.values, auto.t.values)
+
+
 def test_report_mentions_the_costly_misconfigurations(
     map_space: xr.Dataset,
 ) -> None:

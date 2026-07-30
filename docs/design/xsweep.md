@@ -514,20 +514,26 @@ FR-018, FR-036, FR-027, FR-028:
   under v0's grid (cheap + scalar-only + very many points + persistence) is
   addressed post-v0 by coalescing regions into memory-budgeted chunks,
   buffered by execution rather than the store layout (see docs/implementation-findings.md).
-- **No automatic batch sizing for `vec`/call dims.** Still true post-v0: the
-  idea splits in two, a memory guard valuable in every regime and throughput
-  tuning that only pays off at scale, and timing-based sizing is rejected
-  outright (the first call always lies because of engine warm-up, and
-  compute time is not linear in batch size). A later deterministic form
-  (declared memory budget plus the output size measured by the probe call)
-  must decide once, persist the choice in the store and reuse it on resume,
-  because batch size determines the store's call-dim chunk width: two runs
-  choosing different sizes would produce incompatible grids. Note the
+- **No automatic batch sizing for `vec`/call dims, except opt-in.** Timing-
+  based sizing is still rejected outright (the first call always lies
+  because of engine warm-up, and compute time is not linear in batch size).
+  Post-v0, `chunks={"wl": "auto"}` sizes a *named* dim from a memory budget
+  (declared, not the output size measured by a probe: outputs are assumed
+  8 bytes/element before the first call, same as everywhere else this
+  library estimates sizes ahead of a call) — see
+  docs/implementation-findings.md. The dim still has to be named explicitly:
+  the reduced-dim check only catches a function that discards the axis
+  entirely, not one that is local-with-neighbourhood on it (a convolution,
+  a moving average) while keeping an output of the same shape, and only the
+  function's author knows which case they are in. No persistence-on-resume
+  turned out to be needed: resuming already requires an identical space and
+  contract (checked), and the sizing function is pure given those, so it
+  reproduces the same width every time without being told to. Note the
   library can only bound its own buffers, never the callee's internal
   allocation. This is distinct from the loop-dim chunk width, which post-v0
-  IS sized automatically from a memory budget (see docs/implementation-findings.md): a loop dim
-  carries no callee-facing batch, so choosing its width is purely an
-  execution/store concern with no callee semantics at stake.
+  is *always* sized automatically (no naming needed): a loop dim carries no
+  callee-facing batch, so there is no halo risk to guard against, only an
+  execution/store concern.
 - **Observability: standard-library structured logging only.** No progress
   callback in v0, because the status variable already makes progress
   inspectable from the store, and a callback would grow both the public

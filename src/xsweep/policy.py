@@ -56,6 +56,11 @@ class SweepPolicy:
         resume.
     chunks
         Batch sizes keyed by DIM, overriding any ``@ N`` in the contract.
+        A dim must still be named explicitly to be batched at all, which is
+        what lets a function that needs its whole axis (a convolution, a
+        moving average) stay correct by simply not being named; the value
+        for a named dim may be ``"auto"`` to size it from a memory budget
+        instead of a fixed number.
     store_chunks
         Chunk width per loop dim in the store, overriding the automatic
         memory-budget sizing. Affects write cost only, never results: a
@@ -83,7 +88,7 @@ class SweepPolicy:
     """
 
     store: str | Path | None | _Unset = UNSET
-    chunks: Mapping[str, int] | _Unset = UNSET
+    chunks: Mapping[str, int | Literal["auto"]] | _Unset = UNSET
     store_chunks: Mapping[str, int] | _Unset = UNSET
     dedup: bool | tuple[str, ...] | _Unset = UNSET
     executor: str | Any | _Unset = UNSET
@@ -100,7 +105,7 @@ class ResolvedPolicy:
     """A policy with every field concrete, consumed by planning and execution."""
 
     store: str | Path | None = None
-    chunks: Mapping[str, int] = field(default_factory=dict)
+    chunks: Mapping[str, int | Literal["auto"]] = field(default_factory=dict)
     store_chunks: Mapping[str, int] = field(default_factory=dict)
     dedup: bool | tuple[str, ...] = False
     executor: str | Any = "serial"
@@ -167,11 +172,15 @@ def validate(policy: ResolvedPolicy, *, available_dims: tuple[str, ...]) -> None
     """
     listed = ", ".join(available_dims) or "none"
 
-    for dim in policy.chunks:
+    for dim, value in policy.chunks.items():
         if dim not in available_dims:
             raise PolicyError(
                 f"chunks names dim {dim!r}, which the space does not have; "
                 f"available dims: {listed}"
+            )
+        if value != "auto" and (not isinstance(value, int) or value < 1):
+            raise PolicyError(
+                f"chunks[{dim!r}] must be 'auto' or an int >= 1, got {value!r}"
             )
     for dim, size in policy.store_chunks.items():
         if dim not in available_dims:
