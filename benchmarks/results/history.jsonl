@@ -8,3 +8,5 @@
 {"case": "07_hyperspectral_cube_memory_scaling_dedup", "xsweep_version": "0.3.0", "date": "2026-07-30", "host": "fedora", "cpu_count": 16, "n_calls": 8, "wall_time_s": 0.075442}
 {"case": "08_monte_carlo_seed_ensemble", "xsweep_version": "0.3.0", "date": "2026-07-30", "host": "fedora", "cpu_count": 16, "n_calls": 300, "wall_time_s": 0.062614}
 {"case": "09_sweepmodule_lut_process_executor", "xsweep_version": "0.3.0", "date": "2026-07-30", "host": "fedora", "cpu_count": 16, "n_calls": 1600, "wall_time_s": 2.546708}
+{"case": "10_resume_after_interruption_full", "xsweep_version": "0.3.0", "date": "2026-07-30", "host": "fedora", "cpu_count": 16, "n_calls": 900, "wall_time_s": 2.07661}
+{"case": "10_resume_after_interruption_resume", "xsweep_version": "0.3.0", "date": "2026-07-30", "host": "fedora", "cpu_count": 16, "n_calls": 90, "wall_time_s": 0.238189}
