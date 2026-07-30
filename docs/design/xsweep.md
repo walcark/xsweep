@@ -96,8 +96,12 @@ loop(aot, rh, sza, profile) vec(wl @ 8) const(srf) -> tdir_down(wl)
   the result. Delivered as native Python scalars by default.
 - `vec(x @ N)`: the whole axis (or chunks of max N) in one call; its dim
   appears as a call-output dim. Chunkable by promise (see 4.2).
-- `const(x)`: context data (SRF tables, LUTs), passed whole to every call,
-  never chunked; its dims may or may not appear in the call output.
+- `const(x)`: context data (SRF tables, LUTs), passed whole to every call;
+  its dims may or may not appear in the call output. If `x` shares a dim
+  with a batched `vec` variable it auto-aligns to the active batch instead
+  of causing a shape mismatch, unless that dim is declared protected:
+  `const(bias(x, y))` keeps `x` and `y` whole on `bias` regardless of what
+  the policy batches (added post-v0, see docs/implementation-findings.md).
 - `-> name(dims), name2(dims2)`: NAMED outputs with their call-level dims.
   Needed for DAG wiring, store pre-allocation and nominative validation of
   the function's return. There is NO `in` clause: inputs are already
@@ -310,9 +314,14 @@ resumability; fixes the accumulate-then-combine memory profile of adjeff.
 - OUTPUT IS LAZY BY DEFAULT: `mod(space)` returns `xr.open_zarr(store)`
   (lazy, chunked); `.load()` is the user's choice. Memory bounded by one
   chunk regardless of sweep size.
-- Region writes must align with zarr chunk boundaries (derive zarr chunking
-  from the contract: 1 loop point = 1 chunk or an integer multiple),
-  otherwise parallel writers corrupt shared chunks.
+- Execution has exactly one writer (the parent process collecting
+  outcomes), so the store's loop-dim chunk grid is sized from a memory
+  budget rather than pinned to one point per chunk. The original "one loop
+  point = one chunk, for safe parallel writers" rationale did not describe
+  this architecture, since there is only ever one writer; see
+  docs/implementation-findings.md. Execution buffers outcomes per chunk and
+  flushes each chunk once, which is what makes a wider grid a pure win
+  rather than a read-modify-write per point.
 - A sidecar `status` variable (ok/failed/skipped) accompanies the data,
   otherwise resume and failure are indistinguishable.
 - Store pre-allocation needs output sizes: declared in the contract or
@@ -420,7 +429,7 @@ unchanged; the findings:
 | 3 | Output dims of unknown size before first call | Store cannot be pre-allocated | Probe call, or sizes declared in contract | |
 | 4 | Invalid points (masked pixels, NaN axes, absurd combos) | Wasted or crashing engine calls | `skip_where=` / NaN-skip + `status` var | |
 | 5 | Call failure mid-sweep | One failure kills the sweep; resume ambiguous | NaN slice + status=failed + continue; optional global fail; retry count | |
-| 6 | Parallel zarr writes across region boundaries | Corrupted shared chunks | Derive zarr chunks from contract (1 loop point = 1 chunk or multiple) | |
+| 6 | Store chunk grid finer than what execution flushes | A read-modify-write per point instead of per chunk | Size loop-dim chunks from a memory budget, buffer writes per chunk (see docs/implementation-findings.md) | |
 | 7 | Non-serialisable statics | Cache key impossible | `__cache_token__` protocol or explicit exclusion | |
 | 8 | Function code changes | Stale cache reused | User-declared `version=` in decorator | |
 | 9 | Resume with modified space (axis extended) | Silent misalignment with store | Detect mismatch, refuse with clear message | Reindex store on pure extension |
@@ -466,11 +475,13 @@ now the normative record:
   4.2. Consequence: `@ N` in a contract is a physics-informed DEFAULT,
   overridable by policy, which is coherent with the sacred property (batch
   size never changes the result on a vec dim, by definition of vec).
-- **Store layout**: one loop point per write region, aligned on store chunk
-  boundaries. A store belongs to one sweep configuration in v0: it carries a
-  fingerprint of (contract, version, statics) and refuses to open under a
-  different one. Sharing a store between instances is deferred with the
-  output-rename feature.
+- **Store layout**: one write region per call, aligned on store chunk
+  boundaries. The chunk grid itself was pinned to one loop point per chunk in
+  v0; post-v0 it is sized from a memory budget instead, with execution
+  buffering writes per chunk (see docs/implementation-findings.md). A store belongs to one sweep
+  configuration in v0: it carries a fingerprint of (contract, version,
+  statics) and refuses to open under a different one. Sharing a store
+  between instances is deferred with the output-rename feature.
 
 Four further decisions taken on 2026-07-29 during clarification, recorded in
 FR-018, FR-036, FR-027, FR-028:
@@ -486,28 +497,31 @@ FR-018, FR-036, FR-027, FR-028:
   workflow (one store per version, explicit concat), never a sweep axis:
   version selects code, not data.
 - **Target scale: about 1e4 loop points with callees costing seconds to
-  minutes.** This is what makes one write region per loop point free (under
-  1% overhead), and the regime is self-limiting: 1e6 points at ten seconds
-  each would run for months, so "very many points" and "expensive callee"
-  are mutually exclusive in practice. Large maps reach the target range
-  through dedup. Fast callees are NOT excluded: a fast function is usually
-  vectorisable, hence `vec` (one call for a whole axis, not a million loop
-  points), and the store-less in-memory mode removes the per-point write
-  cost entirely. Only the conjunction is a non-goal (cheap + scalar-only +
-  very many points + persistence); serving it would need coalesced regions,
-  which would coarsen resume granularity and the status variable, and couple
-  the executor to the store layout. It stays available later as a purely
-  internal change.
-- **No automatic batch sizing in v0.** The idea splits in two: a memory
-  guard is valuable in every regime, while throughput tuning only pays in
-  the regime just declared a non-goal. Timing-based sizing is rejected
+  minutes.** At v0's one-loop-point-per-chunk grid this made bookkeeping
+  free (under 1% overhead), and the regime is self-limiting: 1e6 points at
+  ten seconds each would run for months, so "very many points" and
+  "expensive callee" are mutually exclusive in practice. Large maps reach the
+  target range through dedup. Fast callees are NOT excluded: a fast function
+  is usually vectorisable, hence `vec` (one call for a whole axis, not a
+  million loop points), and the store-less in-memory mode removes the
+  per-point write cost entirely. The conjunction that stayed a non-goal
+  under v0's grid (cheap + scalar-only + very many points + persistence) is
+  addressed post-v0 by coalescing regions into memory-budgeted chunks,
+  buffered by execution rather than the store layout (see docs/implementation-findings.md).
+- **No automatic batch sizing for `vec`/call dims.** Still true post-v0: the
+  idea splits in two, a memory guard valuable in every regime and throughput
+  tuning that only pays off at scale, and timing-based sizing is rejected
   outright (the first call always lies because of engine warm-up, and
   compute time is not linear in batch size). A later deterministic form
   (declared memory budget plus the output size measured by the probe call)
   must decide once, persist the choice in the store and reuse it on resume,
-  because batch size determines the store chunk grid: two runs choosing
-  different sizes would produce incompatible grids. Note the library can
-  only bound its own buffers, never the callee's internal allocation.
+  because batch size determines the store's call-dim chunk width: two runs
+  choosing different sizes would produce incompatible grids. Note the
+  library can only bound its own buffers, never the callee's internal
+  allocation. This is distinct from the loop-dim chunk width, which post-v0
+  IS sized automatically from a memory budget (see docs/implementation-findings.md): a loop dim
+  carries no callee-facing batch, so choosing its width is purely an
+  execution/store concern with no callee semantics at stake.
 - **Observability: standard-library structured logging only.** No progress
   callback in v0, because the status variable already makes progress
   inspectable from the store, and a callback would grow both the public

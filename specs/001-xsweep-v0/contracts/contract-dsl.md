@@ -11,11 +11,13 @@ contract   ::= clause* "->" outputs
 clause     ::= loop_cl | vec_cl | const_cl
 loop_cl    ::= "loop" "(" name_list ")"
 vec_cl     ::= "vec"  "(" vec_list  ")"
-const_cl   ::= "const" "(" name_list ")"
+const_cl   ::= "const" "(" const_list ")"
 outputs    ::= out_var ("," out_var)*
 out_var    ::= name "(" [dim_list] ")"
 vec_list   ::= vec_item ("," vec_item)*
 vec_item   ::= name ["@" integer]
+const_list ::= const_item ("," const_item)*
+const_item ::= name ["(" [dim_list] ")"]
 name_list  ::= name ("," name)*
 dim_list   ::= name ("," name)*
 name       ::= python_identifier
@@ -38,6 +40,13 @@ loop(aot, rh, sza) vec(wl @ 8) const(srf) -> tdir_down(wl)
 - `vec(wl)` without `@ N` means the whole axis in one call.
 - Multi-dim vec variables are allowed; their batch sizes come from the
   policy, never from `@ N` (FR-010).
+- A const variable is handed whole, except on any dim it shares with a
+  batched vec dim, where it auto-aligns to the active batch instead of
+  causing a shape mismatch in the callable. `const(srf, bias(x, y))` marks
+  `x` and `y` as protected on `bias`: those dims never slice, whatever the
+  policy batches, which is the escape hatch for a const array that needs a
+  full axis internally (a normalisation, a reduction) even while some other
+  variable sharing that axis name is being batched.
 - Statics are absent from the contract by design: they are configuration,
   not data.
 
@@ -63,7 +72,9 @@ errors carry the offending names.
 | Duplicate output name | `output 'rho' declared twice` |
 | `@ N` on a multi-dim vec variable | `'@ 8' on multi-dim variable 'A'; declare batch sizes per dim in the policy, e.g. chunks={"x": 500}` |
 | `@ N` with `N < 1` | `batch size must be >= 1, got 0` |
-| Batch on a reduced dim | `dim 'wl' is batched but absent from every declared output; the function reduces over it, so batching would corrupt the result` |
+| Batch on a reduced dim (1-D `@ N`) | `dim 'wl' is batched but absent from every declared output; the function reduces over it, so batching would corrupt the result` |
+| Batch on a reduced dim (multi-dim `policy.chunks`) | `chunks batches dim 'y', which is absent from every declared output ['band']; the function reduces over it, so batching would corrupt the result` |
+| Protected dim the const variable does not carry | `const 'bias' protects dim(s) ['z'], which it does not carry in the space; its dims are ['x', 'y']` |
 | No outputs | `contract declares no output` |
 | Invalid identifier | `'2wl' is not a valid name at offset 12` |
 
@@ -74,5 +85,6 @@ modules (`__init_subclass__`) and decoration time for functions (FR-007). No
 contract error may first appear during a sweep.
 
 Checks that need the space (a vec variable's rank, a chunked dim's
-existence) run during planning, still before any call of the wrapped
+existence, a const variable's protected dims, a reduced dim batched through
+`policy.chunks`) run during planning, still before any call of the wrapped
 function.

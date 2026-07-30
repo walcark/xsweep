@@ -6,39 +6,52 @@ restates (spec FR-026).
 
 ## Scope of the persistent mode
 
-The persistent mode is calibrated for around 1e4 loop points with callees
-costing seconds to minutes. One write region per loop point is negligible at
-that ratio, and the regime is self-limiting anyway: a million points at ten
-seconds each would run for months.
+The persistent mode is calibrated for callees costing seconds to minutes,
+where engine time dominates by construction. Fast callees are NOT excluded: a
+fast function is usually vectorisable, so it belongs in `vec` (one call for a
+whole axis, not a million loop points), and the store-less mode removes
+bookkeeping cost entirely. For a cheap, scalar-only, very-many-point sweep
+that still needs persistence, execution buffers writes into coarse store
+chunks (see below), which keeps bookkeeping a small fraction of a real run
+even at large point counts.
 
-Fast callees are NOT excluded. A fast function is usually vectorisable, so it
-belongs in `vec` (one call for a whole axis, not a million loop points), and
-the store-less mode removes the per-point write cost entirely. Only the
-conjunction is a non-goal: cheap, scalar-only, very many points, AND needing
-persistence. Serving it would need coalesced regions, which would coarsen
-resume granularity and the status variable.
+## The store chunk grid
 
-## The cost of one chunk per loop point
+Execution has exactly one writer: the parent process collecting outcomes as
+they complete. The store's loop-dim chunk grid is therefore sized from a
+memory budget (64 MB by default, overridable per dim with
+`SweepPolicy(loop_chunks=...)`), not pinned to one point per chunk. A size-1
+grid turns every point's write into a read-modify-write of that whole chunk;
+execution's write buffer reads a chunk once, places every point it produces,
+and writes it back once when every runnable point that chunk owns has an
+outcome. Status is buffered the same way, since a zarr write's cost is
+dominated by its fixed per-call overhead, not by the one byte a status code
+carries.
 
-The store chunk grid is one along every loop dim. That is what makes
-concurrent region writes safe with no coordination: two workers never touch
-the same chunk because they never share a point. The price is a per-point
-write cost, measured at roughly 5 ms on a developer workstation, most of it
-inside zarr rather than on the filesystem.
+Measured on a 200x200 Cartesian sweep (40,000 points, a near-free callee):
+the one-point-per-chunk grid costs about 69 s (1.7 ms/point); the buffered,
+memory-budget grid costs about 3.8 s (0.09 ms/point), roughly 18x. With a
+real engine the calls still dominate by orders of magnitude either way, so
+this only matters when bookkeeping was already competing with engine time.
 
-At the target scale this is invisible: 1e4 points cost about a minute of
-bookkeeping against hours of engine time. It becomes the dominant cost in one
-case, and it is worth stating plainly: a large deduplicated map. A million
-pixels means a million chunks, so filling the duplicated positions costs a
-million chunk writes whatever the deduplication saved on calls. Measured on a
-3600-pixel map with 25 unique rows and a free callee, deduplication divides
-the calls by 144 and the wall time only by two.
+This also benefits a large deduplicated map for free: `Store.expand` fills
+duplicated positions in slabs along the first loop dim, and a slab spanning
+several store chunks was exactly as costly as one point per chunk under the
+old grid. It now inherits the same coarse grid with no change to `expand`
+itself.
 
-With a real engine the calls still dominate by orders of magnitude, so
-deduplication remains the right choice. But the absolute floor is set by the
-chunk grid, and lowering it means coalescing several loop points per chunk,
-which would coarsen resume granularity and the status variable. That trade is
-deliberately out of v0.
+One point per chunk is still available, and is what `place()` uses
+automatically whenever every loop dim's chunk width is 1 (including an
+explicit `loop_chunks` override of 1): with nothing else in the chunk to
+preserve, reading it first would only add a read no direct write pays for.
+
+A wider chunk means more computed-but-unflushed points sit in memory before
+a chunk completes, and more of them are recomputed (not lost, since nothing
+un-flushed was ever persisted) if the process is killed hard mid-chunk. A
+`PointFailed` raise flushes every open chunk before propagating, so an
+`on_error="raise"` sweep never loses a result it already computed, buffered
+or not; only an unrecoverable kill can lose a partial chunk's progress, and
+even then only what that one chunk was still holding.
 
 ## Store and concurrency
 

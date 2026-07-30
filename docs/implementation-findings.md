@@ -90,6 +90,61 @@ A related discovery: `policy` is keyword-only, so a static of that name binds
 to the parameter and can never reach the statics. Its entry in the reserved
 list is therefore unreachable. It is kept for symmetry, and the test says so.
 
+### 9. A const variable sharing a batched dim could mismatch shapes
+
+`const` was documented and implemented as "always whole", full stop. That is
+too strong: if a const variable happens to share a dim with a batched `vec`
+variable, handing it the whole axis while the vec variable arrives sliced
+gives the callee two arrays of different sizes on what should be the same
+axis, either a hard shape error or, worse, a silent misalignment if xarray
+resolves it through coordinate-based alignment instead.
+
+Const variables now auto-align to the active batch on any dim they share
+with one, the same slicing `vec` already gets. An escape hatch stays
+available for the case where the callee genuinely needs the full axis of a
+const array regardless of what else is being batched (a normalisation, a
+reduction): `const(bias(x, y))` protects `x` and `y` on `bias` from ever
+being sliced. `explain()`'s reported shape for a const argument now reflects
+whichever applies.
+
+### 10. The reduced-dim batching guard only covered the 1-D shorthand
+
+The `@ N` marker refuses to batch a dim absent from the contract's declared
+outputs, since the function would then be reducing over a dim being split
+into pieces, corrupting the result. `policy.chunks`, the multi-dim
+equivalent for batching a `vec` variable with more than one dim, checked
+only that the named dim belonged to some vec variable, not that it survived
+to the output. The same corruption was reachable through the multi-dim path
+with no refusal at all. Both now share the same `dim in contract.out_dims`
+check.
+
+### 11. SweepModule combined with the process executor was broken (2026-07-30)
+
+The README's own example (`RhoAtm(SweepPolicy(..., executor="process"))`)
+does not work as written. `Sweeper.__reduce__` pickles by reference (module
+plus qualname), added so a decorator-rebound module-level function stays
+reachable by a worker. For a `SweepModule` instance, the wrapped callable is
+a bound method (`self.forward`), whose `__qualname__` is class-qualified
+(`"RhoAtm.forward"`) with no trace of the instance. The by-reference lookup
+therefore resolves to the unbound function on the class, which is not a
+`Sweeper`, so every worker in the pool raised at the `isinstance` check and
+the whole pool died with `BrokenProcessPool`.
+
+This is exactly the combination the class facade exists for: `__init__`-
+built state (an engine handle, a loaded table) has nowhere clean to live
+with the bare decorator, so it is the natural candidate for
+`executor="process"`. The bug made that combination impossible, silently
+promised by the README's own example, with nothing in `test_module.py`
+covering `executor="process"` to catch it.
+
+Checked before fixing: a bound method already pickles correctly on its own,
+through its instance, as long as the class is importable by qualname and
+the instance state is picklable. The by-reference lookup was solving a
+problem bound methods do not have. Fixed by making `__reduce__` conditional
+on `hasattr(self.func, "__self__")`: a bound method now reconstructs through
+the constructor (contract, the already-unpickled bound method, policy,
+version, name), and a plain function keeps the by-reference lookup.
+
 ## Measurements that corrected the specification
 
 ### The per-point cost was five times the estimate
@@ -144,20 +199,68 @@ Linear in PIXELS, flat per pixel, independent of how many unique rows there
 are. Extrapolating: 1e5 pixels take four minutes, 1e6 take thirty-seven, a
 full Sentinel-2 tile would take three days.
 
-The cause is the store chunk grid: one chunk per loop point, which is what
-makes concurrent region writes safe with no coordination. A million pixels
-means a million chunk files, and filling them costs a million writes whatever
-deduplication saved on calls.
+The cause is the store chunk grid: one chunk per loop point. The stated
+reason was that this is what makes concurrent region writes safe with no
+coordination. A million pixels means a million chunk files, and filling them
+costs a million writes whatever deduplication saved on calls.
 
 This does not show with a real engine below about 1e5 points: the same 3600
 pixel map with a ten-second callee takes ten hours without dedup and four
 minutes with it. Beyond that scale it becomes visible even with an expensive
 callee.
 
-**The v1 candidate**: coarser chunks along the loop dims, say 256 by 256 on a
-map, which would bring a Sentinel-2 tile from 1.2e8 chunks to about 1800. The
-cost is that two workers could then share a chunk during the computation
-phase, so writes would need serialising or buffering per chunk. Resume
-granularity and the status variable would coarsen with it. That trade is
-deliberately out of v0 and is stated in
-[limitations](limitations.md).
+### The chunk-per-point justification did not hold in the implementation, and coarser chunks are now the default (2026-07-30)
+
+The "safe concurrent writers" reasoning above was checked against the actual
+execution loop and found false: `_run` streams outcomes back from the
+executor and writes every one of them in the parent process. There is
+exactly one writer, always, so a chunk grid sized for concurrent writers was
+buying nothing. The real reason chunk-per-point "worked" is unrelated to
+concurrency: a write into a size-1 chunk is one independent write, while a
+write into a shared chunk is a read-modify-write of the whole chunk, and
+that cost was paid once per point instead of once per chunk.
+
+The fix implemented: the store's loop-dim chunk grid is now sized from a
+memory budget (64 MB by default), not pinned to one point per chunk, and
+overridable per dim with `SweepPolicy(loop_chunks=...)`. Execution buffers
+outcomes per chunk, reading it once, placing every point it produces, and
+writing it back once when every runnable point that chunk owns has an
+outcome, so a wider grid amortises the read-modify-write across a whole
+chunk instead of paying it per point. A one-point chunk (the default's
+floor when a row is wide relative to the budget, or an explicit
+`loop_chunks` override of 1) skips the read entirely and writes straight
+through, matching the old cost exactly: nothing else can share that chunk,
+so there is nothing to preserve.
+
+The first measurement covered only the data arrays and looked like enough:
+a 200x200 Cartesian sweep (40,000 points, a near-free callee) went from 69 s
+(1.7 ms/point) at chunk-per-point to 39 s with the wider grid. Isolating the
+status writes (stubbed to a no-op) showed the data path alone had actually
+dropped to 4.2 s; **status writes, still unbuffered on the reasoning that
+one byte is too cheap to bother with, accounted for the other 35 s.** A
+zarr write's cost is dominated by its fixed per-call overhead (encoding,
+storage put, journaling), not by payload size, so a 1-byte write costs
+about as much as a several-KB one. Status is now buffered and flushed the
+same way as the data, sharing the same chunk grid. Final measurement: **3.8
+s, 0.09 ms/point, about 18x** over the chunk-per-point baseline.
+
+`Store.expand`'s duplicate-filling pass (the 144x-calls-but-1.0x-wall-time
+case above) needed no change at all: it already slabs along the first loop
+dim from a memory budget, and a slab spanning several store chunks is only
+cheap when the chunk grid itself is coarse. It now inherits the wider grid
+automatically.
+
+A related but distinct gap surfaced while discussing the fix: `_stream`
+collected every outcome into a list before `_run` wrote any of them, so
+`on_error="raise"` losing a point mid-run discarded every success computed
+earlier in that same run, not just the failing one. `_stream` is now a
+generator, and `_run` writes (or buffers) each outcome as it arrives; a
+raise now flushes whatever is buffered before propagating, so nothing
+already computed is lost, matching what the failure/resume story already
+promised for separate runs but did not actually hold for a single one.
+
+This closes the v1 candidate previously recorded here (coarser loop-dim
+chunks, buffered per chunk); see [limitations](limitations.md) for the
+current numbers and the remaining trade (more computed-but-unflushed points
+sit in memory before a chunk completes, so a hard kill mid-chunk recomputes
+more, though it never loses a persisted result).
