@@ -65,6 +65,16 @@ class SweepModule:
         """Compute one point. Pure physics, testable on its own."""
         raise NotImplementedError(f"{type(self).__name__} must implement forward()")
 
+    def _require_sweeper(self) -> Sweeper:
+        """Return the sweeper built in __init__, or fail with an actionable message."""
+        if not hasattr(self, "_sweeper"):
+            raise ContractError(
+                f"{type(self).__name__}.__init__ overrides SweepModule.__init__ "
+                "without calling super().__init__(policy); add that call, since "
+                "it is what builds the sweeper this instance runs on"
+            )
+        return self._sweeper
+
     def explain(
         self,
         space: xr.Dataset,
@@ -74,7 +84,7 @@ class SweepModule:
         **statics: Any,
     ) -> Plan:
         """Resolve the sweep without calling ``forward`` once."""
-        return self._sweeper.explain(space, policy=policy, **statics)
+        return self._require_sweeper().explain(space, policy=policy, **statics)
 
     def __call__(
         self,
@@ -85,4 +95,4 @@ class SweepModule:
         **statics: Any,
     ) -> xr.Dataset:
         """Plan the sweep, then execute it."""
-        return self._sweeper(space, policy=policy, **statics)
+        return self._require_sweeper()(space, policy=policy, **statics)

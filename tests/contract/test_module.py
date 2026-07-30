@@ -129,3 +129,22 @@ def test_instance_state_survives_the_process_executor() -> None:
     module = RhoWithState(SweepPolicy(executor="process"), offset=100.0)
     result = module(space)
     assert np.array_equal(result.out.values, [102.0, 104.0, 106.0])
+
+
+def test_forgetting_super_init_fails_with_an_actionable_message() -> None:
+    """A missing super().__init__(policy) must not surface as a raw AttributeError."""
+
+    class Forgetful(SweepModule):
+        contract = "loop(a) -> out()"
+
+        def __init__(self, policy: SweepPolicy | None = None) -> None:
+            pass  # forgot super().__init__(policy)
+
+        def forward(self, a: float) -> float:
+            return a
+
+    space = xr.Dataset({"a": ("a", [1.0])})
+    with pytest.raises(ContractError, match="without calling super"):
+        Forgetful()(space)
+    with pytest.raises(ContractError, match="without calling super"):
+        Forgetful().explain(space)
