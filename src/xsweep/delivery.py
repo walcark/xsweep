@@ -65,8 +65,8 @@ def normalise_return(result: Any, contract: Contract) -> xr.Dataset:
     Parameters
     ----------
     result
-        A bare array for a single-output contract, an ordered tuple for a
-        multi-output one, or an explicit Dataset.
+        A bare array for a single-output contract, a dict or an explicit
+        Dataset for any contract.
     contract
         The contract declaring the expected output names.
 
@@ -78,8 +78,11 @@ def normalise_return(result: Any, contract: Contract) -> xr.Dataset:
     Raises
     ------
     ContractError
-        If the shape of the return does not match the declaration, or a
-        Dataset omits a declared output.
+        If the shape of the return does not match the declaration, a dict or
+        a Dataset omits a declared output, or a multi-output contract is
+        handed a tuple: a tuple is matched by position only, so a swapped
+        pair of return values would go undetected, which is exactly the
+        failure a name-checked return exists to prevent.
     """
     names = contract.outputs
 
@@ -93,6 +96,16 @@ def normalise_return(result: Any, contract: Contract) -> xr.Dataset:
             )
         return result[list(names)]
 
+    if isinstance(result, dict):
+        missing = [n for n in names if n not in result]
+        if missing:
+            got = ", ".join(map(str, result)) or "none"
+            raise ContractError(
+                f"returned dict is missing {missing!r}; the contract "
+                f"declares outputs {list(names)!r} and the dict holds: {got}"
+            )
+        return xr.Dataset({name: _as_dataarray(result[name], name) for name in names})
+
     if len(names) == 1:
         if isinstance(result, tuple):
             raise ContractError(
@@ -101,22 +114,12 @@ def normalise_return(result: Any, contract: Contract) -> xr.Dataset:
             )
         return xr.Dataset({names[0]: _as_dataarray(result, names[0])})
 
-    if not isinstance(result, tuple):
-        raise ContractError(
-            f"contract declares {len(names)} outputs {list(names)!r} so the "
-            f"function must return a tuple in that order, got "
-            f"{type(result).__name__}"
-        )
-    if len(result) != len(names):
-        raise ContractError(
-            f"contract declares {len(names)} outputs {list(names)!r} but the "
-            f"function returned {len(result)} values"
-        )
-    return xr.Dataset(
-        {
-            name: _as_dataarray(value, name)
-            for name, value in zip(names, result, strict=True)
-        }
+    example = ", ".join(f"{n!r}: ..." for n in names)
+    raise ContractError(
+        f"contract declares {len(names)} outputs {list(names)!r}; return a "
+        f"dict ({{{example}}}) or an xr.Dataset, not a tuple: a tuple is "
+        "matched by position only, so swapping two return values would go "
+        "undetected"
     )
 
 

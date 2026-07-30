@@ -62,14 +62,30 @@ def test_bare_scalar_is_accepted_for_a_scalar_output() -> None:
     assert float(out["out"]) == 3.5
 
 
-def test_tuple_maps_onto_declaration_order() -> None:
-    """Multi-output contracts read the tuple in the order they declared."""
+def test_dict_maps_onto_declared_names() -> None:
+    """Multi-output contracts read a dict by name, order does not matter."""
     contract = Contract.parse("loop(a) -> rho(wl), t(wl)")
     rho = xr.DataArray([1.0, 2.0], dims="wl")
     t = xr.DataArray([3.0, 4.0], dims="wl")
-    out = normalise_return((rho, t), contract)
+    out = normalise_return({"t": t, "rho": rho}, contract)
     assert list(out.data_vars) == ["rho", "t"]
     assert float(out["t"][0]) == 3.0
+
+
+def test_dict_missing_an_output_is_rejected() -> None:
+    """A wrong or missing key is a contract violation, not a silent omission."""
+    contract = Contract.parse("loop(a) -> rho(wl), t(wl)")
+    with pytest.raises(ContractError, match="missing \\['t'\\]"):
+        normalise_return({"rho": xr.DataArray([1.0], dims="wl")}, contract)
+
+
+def test_a_tuple_for_multiple_outputs_is_refused() -> None:
+    """Positional matching would let a swapped pair go undetected, so it is gone."""
+    contract = Contract.parse("loop(a) -> rho(wl), t(wl)")
+    rho = xr.DataArray([1.0, 2.0], dims="wl")
+    t = xr.DataArray([3.0, 4.0], dims="wl")
+    with pytest.raises(ContractError, match="not a tuple"):
+        normalise_return((rho, t), contract)
 
 
 def test_dataset_is_validated_by_name() -> None:
@@ -94,8 +110,8 @@ def test_dataset_missing_an_output_is_rejected() -> None:
     ("result", "spec", "fragment"),
     [
         ((1.0, 2.0), "loop(a) -> out()", "returned a tuple of 2"),
-        (1.0, "loop(a) -> rho(), t()", "must return a tuple"),
-        ((1.0,), "loop(a) -> rho(), t()", "returned 1 values"),
+        (1.0, "loop(a) -> rho(), t()", "not a tuple"),
+        ((1.0,), "loop(a) -> rho(), t()", "not a tuple"),
     ],
 )
 def test_return_shape_mismatches(result: object, spec: str, fragment: str) -> None:

@@ -145,6 +145,25 @@ on `hasattr(self.func, "__self__")`: a bound method now reconstructs through
 the constructor (contract, the already-unpickled bound method, policy,
 version, name), and a plain function keeps the by-reference lookup.
 
+### 12. A multi-output tuple return could swap two values undetected (2026-07-30)
+
+`normalise_return` accepted a bare tuple for a multi-output contract,
+matched to `contract.outputs` by position. An `xr.Dataset` return was
+already checked by name, so a Dataset return could never silently swap
+two outputs, but a tuple could: reordering two return values without
+touching the contract passed every check and produced a result with the
+values under the wrong names.
+
+Reviewing the API surface for this reason turned up that the safe path
+(name-checked) already existed for `Dataset`, just not for anything
+lighter, so `forward` had to either accept the position-only risk or take
+on an xarray dependency just to return two values safely. A plain dict
+keyed by output name is now accepted alongside `Dataset`, validated the
+same way (missing name is a clear `ContractError`), and the tuple path is
+removed outright for a multi-output contract rather than kept as a
+still-available foot-gun. Single-output contracts are unaffected: there is
+nothing to swap with one value.
+
 ## Measurements that corrected the specification
 
 ### The per-point cost was five times the estimate

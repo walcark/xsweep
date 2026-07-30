@@ -270,11 +270,17 @@ The contract names outputs, so `forward` may return:
 
 - a bare (even unnamed) DataArray when the contract declares a single output
   (xsweep names it);
-- an ordered tuple for multi-output contracts (mapped to declaration order);
-- an explicit Dataset (validated nominatively; wrong names = clear error).
+- a dict keyed by output name, or an explicit Dataset (both validated
+  nominatively; wrong or missing names = clear error).
 
 This kills the adjeff constraint "func must return an UNNAMED DataArray"
 (a combine_by_coords artefact).
+
+A multi-output contract refuses a bare tuple outright (post-v0, see
+docs/implementation-findings.md): matching by position let a swapped pair
+of return values pass silently, which a name-checked return exists
+specifically to catch. The dict is the lightweight option when the callee
+should not need to know about xarray at all.
 
 ### 5.5 Module facade (pytorch-style)
 
