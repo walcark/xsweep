@@ -5,6 +5,7 @@ expensive point function into a gridded, cached, resumable computation.</em></p>
 
 <p align="center">
   <a href="https://github.com/walcark/xsweep/actions/workflows/ci.yml"><img src="https://github.com/walcark/xsweep/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://codecov.io/gh/walcark/xsweep"><img src="https://codecov.io/gh/walcark/xsweep/branch/main/graph/badge.svg"></a>
   <img src="https://img.shields.io/badge/python-3.11%2B-blue">
   <a href="https://pixi.sh"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/prefix-dev/pixi/main/assets/badge/v0.json"></a>
   <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json"></a>

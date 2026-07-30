@@ -15,3 +15,13 @@ jobs:
           environments: dev
       - name: fmt, lint, type-check, test
         run: pixi run -e dev all
+
+      # Publishes coverage to Codecov for the README badge. Kept non-blocking
+      # so CI stays green until the CODECOV_TOKEN secret is added.
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v7.0.0
+        continue-on-error: true
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          slug: walcark/xsweep

@@ -43,6 +43,7 @@ zarr = ">=3"
 ruff = "*"
 mypy = ">=1.5"
 pytest = "*"
+pytest-cov = ">=6.0"
 rich = "*"
 git-cliff = "*"
 
@@ -51,7 +52,7 @@ fmt = "ruff format ."
 fmt-check = "ruff format --check ."
 lint = "ruff check src tests"
 type-check = "mypy src"
-test = "pytest -q"
+test = "pytest -q --cov=xsweep --cov-report=term-missing --cov-report=xml"
 all = { depends-on = ["fmt", "lint", "type-check", "test"] }
 changelog = "git-cliff -o CHANGELOG.md"
 
