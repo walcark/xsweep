@@ -7,7 +7,7 @@ import pytest
 import xarray as xr
 
 from xsweep import SweepPolicy, sweep
-from xsweep.errors import ContractError, SpaceError
+from xsweep.errors import ContractError, PolicyError, SpaceError
 
 
 def test_batches_respect_the_declared_maximum() -> None:
@@ -65,6 +65,24 @@ def test_batching_a_reduced_dim_is_refused_at_decoration() -> None:
         @sweep("loop(aot) vec(wl @ 8) const(srf) -> band_int(band)")
         def f(aot: float, wl: xr.DataArray, srf: xr.DataArray) -> xr.DataArray:
             return ((aot * wl) * srf).sum("wl")
+
+
+def test_batching_a_reduced_multi_dim_axis_via_chunks_is_refused() -> None:
+    """The @N guard has a multi-dim equivalent: chunks cannot reduce results.
+
+    The 1-D '@N' shorthand already refuses to batch a dim absent from the
+    outputs (edge case 12). policy.chunks used to only check that the dim
+    belonged to a vec variable, missing the same reduced-dim hazard for
+    multi-dim vec variables.
+    """
+
+    @sweep("vec(A) -> total()")
+    def total(A: xr.DataArray) -> float:
+        return float(A.sum())
+
+    space = xr.Dataset({"A": (("y", "x"), np.ones((4, 4)))})
+    with pytest.raises(PolicyError, match="absent from every declared output"):
+        total(space, policy=SweepPolicy(chunks={"y": 2}))
 
 
 def test_multi_dim_vec_runs_whole_then_tiled_with_the_same_result() -> None:

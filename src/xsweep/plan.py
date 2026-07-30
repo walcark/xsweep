@@ -279,12 +279,20 @@ def _batch_slices(
         if var.name in space
         for dim in map(str, space[var.name].dims)
     }
+    out_dims = set(contract.out_dims)
     for dim, size in policy.chunks.items():
         if dim not in vec_dims:
             listed = ", ".join(sorted(vec_dims)) or "none"
             raise PolicyError(
                 f"chunks names dim {dim!r}, which no vec variable carries; "
                 f"only vec dims can be batched. Batchable dims: {listed}"
+            )
+        if dim not in out_dims:
+            raise PolicyError(
+                f"chunks batches dim {dim!r}, which is absent from every "
+                f"declared output {sorted(out_dims)!r}; the function reduces "
+                "over it, so batching would corrupt the result. Remove it "
+                "from chunks to pass the whole axis in one call"
             )
         sizes[dim] = size
 
