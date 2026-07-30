@@ -1,8 +1,13 @@
-## Unreleased
+## [0.3.0] - 2026-07-30
 
 ### Chores
 
 - Add classifiers, keywords and project URLs ([2a4b4b0](https://github.com/walcark/xsweep/commit/2a4b4b08eeadc80aa5c18480ca4791bb7643795a))
+- Bump version to 0.3.0 ([e8701eb](https://github.com/walcark/xsweep/commit/e8701ebfd74acfdc8db28d90bd546b103fbc8e9b))
+
+### Documentation
+
+- Regenerate CHANGELOG.md ([3036027](https://github.com/walcark/xsweep/commit/3036027921ffd7381394e3d760c10d1102c8244d))
 
 ### Features
 
