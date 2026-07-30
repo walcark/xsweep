@@ -237,6 +237,10 @@ Two more advanced contract features, covered in
 
 ## 10. Where to go next
 
+- [Examples](https://walcark.github.io/xsweep/): a gallery of worked type
+  cases (remote sensing / radiative transfer), each with its equations,
+  actual output, and timing tracked across releases. Source and results
+  ledger in `benchmarks/`.
 - [Idioms](idioms.md): the recipes above, in full.
 - [Limitations](limitations.md): what xsweep deliberately does not do, and
   the measured cost of the store's chunk grid.

@@ -6,6 +6,7 @@ expensive point function into a gridded, cached, resumable computation.</em></p>
 <p align="center">
   <a href="https://github.com/walcark/xsweep/actions/workflows/ci.yml"><img src="https://github.com/walcark/xsweep/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://codecov.io/gh/walcark/xsweep"><img src="https://codecov.io/gh/walcark/xsweep/branch/main/graph/badge.svg"></a>
+  <a href="https://walcark.github.io/xsweep/"><img src="https://github.com/walcark/xsweep/actions/workflows/docs.yml/badge.svg"></a>
   <img src="https://img.shields.io/badge/python-3.11%2B-blue">
   <a href="https://pixi.sh"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/prefix-dev/pixi/main/assets/badge/v0.json"></a>
   <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json"></a>
@@ -121,6 +122,10 @@ backend and no core path imports it.
 
 ## Documentation
 
+- [Examples](https://walcark.github.io/xsweep/): a gallery of worked type
+  cases (remote sensing / radiative transfer), each with its equations,
+  actual output, and timing tracked across releases
+  ([current numbers](benchmarks/results/TIMING.md)).
 - [Guide](docs/guide.md): a progressive tour, from the smallest sweep to the
   cost knobs you reach for once a run gets expensive, and why xsweep exists
   next to `apply_ufunc`.
