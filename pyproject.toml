@@ -70,6 +70,9 @@ pytest = "*"
 pytest-cov = ">=6.0"
 rich = "*"
 git-cliff = "*"
+# Needed here too (not just under `docs`) so benchmark example scripts that
+# plot can also run standalone via `pixi run -e dev python benchmarks/...`.
+matplotlib = "*"
 
 [tool.pixi.feature.dev.tasks]
 fmt = "ruff format ."
