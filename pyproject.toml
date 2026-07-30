@@ -15,6 +15,9 @@ dependencies = [
 # Dask is an executor backend only. No core path imports it.
 [project.optional-dependencies]
 dask = ["dask"]
+# Only used to render Plan reports as tables; explain()/repr(plan) fall back
+# to plain text when it is absent. No core path imports it.
+rich = ["rich"]
 
 [build-system]
 requires = ["hatchling"]
@@ -40,6 +43,7 @@ zarr = ">=3"
 ruff = "*"
 mypy = ">=1.5"
 pytest = "*"
+rich = "*"
 
 [tool.pixi.feature.dev.tasks]
 fmt = "ruff format ."

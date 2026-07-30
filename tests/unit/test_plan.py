@@ -182,5 +182,36 @@ def test_report_mentions_the_costly_misconfigurations(
         return aot
 
     text = repr(f.explain(map_space))
-    assert "dedup        disabled" in text
-    assert "points       6" in text
+    assert "dedup  disabled" in text
+    assert "points          6" in text
+
+
+def test_report_falls_back_to_plain_text_without_rich(
+    monkeypatch: pytest.MonkeyPatch, map_space: xr.Dataset
+) -> None:
+    """rich is optional: the report must still work, just less prettily."""
+    import sys
+
+    monkeypatch.setitem(sys.modules, "rich", None)
+
+    @sweep("loop(aot, rh) -> out()")
+    def f(aot: float, rh: float) -> float:
+        return aot
+
+    text = repr(f.explain(map_space))
+    assert "SPACE" in text
+    assert "dedup" in text and "disabled" in text
+    assert "╭" not in text  # no rich box-drawing characters leaked through
+
+
+def test_report_escapes_a_store_path_with_brackets(tmp_path) -> None:
+    """A path containing '[...]' must not be swallowed as rich markup."""
+    store = tmp_path / "run[final]" / "s.zarr"
+
+    @sweep("loop(a) -> out()", version="1")
+    def f(a: float) -> float:
+        return a
+
+    space = xr.Dataset({"a": ("a", [1.0])})
+    text = repr(f.explain(space, policy=SweepPolicy(store=str(store))))
+    assert "run[final]" in text

@@ -67,12 +67,13 @@ class Sweeper:
         policy: SweepPolicy | None = None,
         *,
         version: str = "0",
+        name: str | None = None,
     ) -> None:
         self.contract = coerce(contract, version=version)
         self.func = func
         self.policy = policy
         self.__doc__ = func.__doc__
-        self.__name__ = getattr(func, "__name__", "sweep")
+        self.__name__ = name if name is not None else getattr(func, "__name__", "sweep")
         self.__module__ = getattr(func, "__module__", __name__)
         self.__qualname__ = getattr(func, "__qualname__", self.__name__)
 
@@ -161,6 +162,7 @@ class Sweeper:
             unique_of, n_unique = unique_map(grid, dims)
 
         return build_plan(
+            name=self.__name__,
             contract=self.contract,
             policy=resolved,
             space=space,

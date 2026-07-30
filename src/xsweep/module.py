@@ -57,7 +57,9 @@ class SweepModule:
 
     def __init__(self, policy: SweepPolicy | None = None) -> None:
         self.policy = policy
-        self._sweeper = Sweeper(type(self)._contract, self.forward, policy)
+        self._sweeper = Sweeper(
+            type(self)._contract, self.forward, policy, name=type(self).__name__
+        )
 
     def forward(self, *args: Any, **kwargs: Any) -> Any:
         """Compute one point. Pure physics, testable on its own."""

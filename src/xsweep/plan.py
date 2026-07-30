@@ -105,6 +105,7 @@ class Plan:
     the run cannot diverge.
     """
 
+    name: str
     contract: Contract
     policy: ResolvedPolicy
     axes: tuple[LoopAxis, ...]
@@ -158,6 +159,7 @@ class Plan:
 
 def build_plan(
     *,
+    name: str = "sweep",
     contract: Contract,
     policy: ResolvedPolicy,
     space: xr.Dataset,
@@ -171,6 +173,8 @@ def build_plan(
 
     Parameters
     ----------
+    name
+        The wrapped callable's name, used only to label the report.
     contract
         The contract describing one call.
     policy
@@ -208,6 +212,7 @@ def build_plan(
     store = _store_spec(policy, result, grid.axes, batches, items)
     source_of = _source_map(grid, items) if unique_of is not None else None
     return Plan(
+        name=name,
         contract=contract,
         policy=policy,
         axes=grid.axes,
@@ -517,8 +522,73 @@ def _render_executor(policy: ResolvedPolicy) -> str:
     return type(policy.executor).__name__
 
 
+def _axis_rows(plan: Plan) -> list[tuple[str, str, int]]:
+    """Return (dim, origin, size) for each loop axis."""
+    return [
+        (a.name, ", ".join(a.carriers) if a.is_zipped else "axis", a.size)
+        for a in plan.axes
+    ]
+
+
+def _dedup_summary(plan: Plan) -> str:
+    """Return a unique/duplicate summary, or "disabled" when dedup is off.
+
+    Always shown, never omitted: a forgotten dedup on a large map is the
+    single most expensive mistake this report can make visible before a
+    single call runs.
+    """
+    if plan.n_unique is None:
+        return "disabled"
+    duplicates = plan.n_points - plan.n_unique
+    noun = "duplicate" if duplicates == 1 else "duplicates"
+    return f"{plan.n_unique} unique ({duplicates} {noun})"
+
+
+def _batch_summaries(plan: Plan) -> list[str]:
+    """Return one summary per batched dim: how many batches, and their sizes."""
+    lines = []
+    for dim, slices in plan.batches.items():
+        widths = sorted({sl.stop - sl.start for sl in slices}, reverse=True)
+        detail = f"<= {widths[0]}"
+        if len(widths) > 1:
+            detail += f", last {widths[-1]}"
+        lines.append(f"{dim}: {len(slices)} batches ({detail})")
+    return lines
+
+
+def _arg_rows(plan: Plan) -> list[tuple[str, str, str, str]]:
+    """Return (name, kind, dtype, shape) for each call argument."""
+    rows = []
+    for arg in plan.call_signature:
+        shape = "" if arg.shape is None else str(list(arg.shape))
+        rows.append((arg.name, arg.kind, arg.dtype, shape))
+    return rows
+
+
+def _result_rows(plan: Plan) -> list[tuple[str, str, str]]:
+    """Return (name, dims, dtype) for each result variable."""
+    rows = []
+    for var in plan.result:
+        sizes = ", ".join(
+            f"{d}: {s if s is not None else '?'}"
+            for d, s in zip(var.dims, var.sizes, strict=True)
+        )
+        rows.append((var.name, sizes, var.dtype))
+    return rows
+
+
+def _store_chunk_note(plan: Plan) -> str | None:
+    """Return a note naming any loop_chunks override, or ``None`` if all auto."""
+    if plan.store is None:
+        return None
+    overrides = sorted(plan.policy.loop_chunks)
+    if not overrides:
+        return None
+    return "overridden: " + ", ".join(overrides)
+
+
 def render(plan: Plan) -> str:
-    """Render a plan as the textual report.
+    """Render a plan as a report, using rich tables when available.
 
     Parameters
     ----------
@@ -528,60 +598,166 @@ def render(plan: Plan) -> str:
     Returns
     -------
     str
-        A multi-line report: contract, space, counts, per-call arguments,
-        result and store layout.
+        A multi-section report: contract, space, counts, per-call
+        arguments, result and store layout. Falls back to plain text when
+        rich is not installed, so this never adds a hard dependency.
     """
+    try:
+        import rich  # noqa: F401
+    except ImportError:
+        return _render_plain(plan)
+    return _render_rich(plan)
+
+
+def _render_plain(plan: Plan) -> str:
+    """Render a plan as plain, aligned text."""
     lines: list[str] = []
-    lines.append(f"Sweep plan{' ' * 21}contract version {plan.contract.version!r}")
-    lines.append(f"  {plan.contract.render()}")
+    title = f"{plan.name} (v{plan.contract.version})"
+    lines.append(f"+- {title} " + "-" * max(0, 58 - len(title)) + "+")
+    lines.append(f"| {plan.contract.render()}")
+    lines.append("+" + "-" * 60 + "+")
     lines.append("")
 
-    origin = " x ".join(
-        f"{a.name}({'zip' if a.is_zipped else 'axis'}: {a.size})" for a in plan.axes
-    )
-    lines.append(f"Loop space     {origin or 'none'}")
-    lines.append(f"  points       {plan.n_points}")
-    if plan.n_unique is not None:
-        lines.append(f"  unique       {plan.n_unique}   (dedup enabled)")
-    else:
-        lines.append("  dedup        disabled")
-
-    for dim, slices in plan.batches.items():
-        widths = sorted({sl.stop - sl.start for sl in slices}, reverse=True)
-        detail = f"of <= {widths[0]}"
-        if len(widths) > 1:
-            detail += f" (last: {widths[-1]})"
-        lines.append(f"Batches        {dim}: {len(slices)} batches {detail}")
-
-    lines.append(f"Calls          {plan.n_calls}")
-    lines.append(f"  cached       {plan.n_cached}")
-    lines.append(f"  skipped      {plan.n_skipped}")
-    lines.append(f"  to compute   {plan.n_to_compute}")
+    lines.append("SPACE")
+    for dim, origin, size in _axis_rows(plan):
+        lines.append(f"  {dim:<10} {origin:<15} {size:>6}")
+    lines.append(f"  {'points':<26} {plan.n_points:>6}")
+    lines.append(f"  {'dedup':<26} {_dedup_summary(plan)}")
+    for summary in _batch_summaries(plan):
+        lines.append(f"  {'batch':<26} {summary}")
     lines.append("")
 
-    lines.append("Each call receives")
-    for arg in plan.call_signature:
-        shape = "" if arg.shape is None else f" {list(arg.shape)}"
-        lines.append(f"  {arg.name:<12} {arg.kind:<7} {arg.dtype}{shape}")
-
+    lines.append("CALLS")
+    lines.append(f"  {'to compute':<12} {plan.n_to_compute:>6}")
+    lines.append(f"  {'cached':<12} {plan.n_cached:>6}")
+    lines.append(f"  {'skipped':<12} {plan.n_skipped:>6}")
+    lines.append(f"  {'total':<12} {len(plan.work_items):>6}")
     lines.append("")
-    for var in plan.result:
-        sizes = ", ".join(
-            f"{d}: {s if s is not None else '?'}"
-            for d, s in zip(var.dims, var.sizes, strict=True)
-        )
-        lines.append(f"Result         {var.name} ({sizes}) {var.dtype}")
+
+    lines.append("ARGUMENTS")
+    for name, kind, dtype, shape in _arg_rows(plan):
+        lines.append(f"  {name:<12} {kind:<7} {dtype:<9} {shape}")
+    lines.append("")
+
+    lines.append("RESULT")
+    for name, dims, dtype in _result_rows(plan):
+        lines.append(f"  {name} ({dims}) {dtype}")
     if not plan.determined:
-        lines.append("               sizes marked '?' are undetermined and will")
-        lines.append("               be discovered by a probe call at execution")
+        lines.append("  sizes marked '?' are undetermined; discovered by a probe call")
+    lines.append("")
 
     if plan.store is not None and plan.store.path is not None:
-        rendered = ", ".join(f"{d}: {n}" for d, n in plan.store.chunks.items())
-        chunks = rendered or "1 per point"
-        lines.append(f"Store          {plan.store.path}")
-        lines.append(f"  chunks       {chunks}")
-        lines.append(f"  regions      {plan.store.n_regions}")
+        lines.append(f"STORE      {plan.store.path}")
+        chunks = ", ".join(f"{d}: {n}" for d, n in plan.store.chunks.items())
+        lines.append(f"  chunks   {chunks or '1 per point'}")
+        note = _store_chunk_note(plan)
+        if note is not None:
+            lines.append(f"           ({note})")
+        lines.append(f"  regions  {plan.store.n_regions}")
     else:
-        lines.append("Store          none (in memory, no cache and no resume)")
-    lines.append(f"Executor       {plan.executor}")
+        lines.append("STORE      none (in-memory: no cache, no resume)")
+    lines.append(f"EXECUTOR   {plan.executor}")
     return "\n".join(lines)
+
+
+def _render_rich(plan: Plan) -> str:
+    """Render a plan as boxed, aligned tables, using rich."""
+    from io import StringIO
+
+    from rich import box
+    from rich.console import Console
+    from rich.markup import escape
+    from rich.panel import Panel
+    from rich.table import Table
+
+    def section(title: str, *, header: bool = False) -> Table:
+        """Start a new section: a bold heading, then a tight, borderless table."""
+        console.print(f"[b]{title}[/b]")
+        return Table(
+            box=box.SIMPLE_HEAD if header else None,
+            show_header=header,
+            show_edge=False,
+            expand=False,
+            padding=(0, 1, 0, 0),
+        )
+
+    buffer = StringIO()
+    console = Console(file=buffer, width=88)
+
+    console.print(
+        Panel(
+            plan.contract.render(),
+            title=f"[b]{plan.name}[/b]",
+            title_align="left",
+            subtitle=f"v{plan.contract.version}",
+            subtitle_align="right",
+            box=box.ROUNDED,
+        )
+    )
+    console.print()
+
+    space = section("SPACE")
+    space.add_column()
+    space.add_column()
+    space.add_column(justify="right")
+    for dim, origin, size in _axis_rows(plan):
+        space.add_row(dim, origin, str(size))
+    space.add_row("points", "", str(plan.n_points), style="bold")
+    space.add_row("dedup", _dedup_summary(plan), "")
+    for summary in _batch_summaries(plan):
+        space.add_row("batch", summary, "")
+    console.print(space)
+    console.print()
+
+    calls = section("CALLS")
+    calls.add_column()
+    calls.add_column(justify="right")
+    calls.add_row("to compute", str(plan.n_to_compute))
+    calls.add_row("cached", str(plan.n_cached))
+    calls.add_row("skipped", str(plan.n_skipped))
+    calls.add_row("total", str(len(plan.work_items)), style="bold")
+    console.print(calls)
+    console.print()
+
+    args = section("ARGUMENTS", header=True)
+    args.add_column("name")
+    args.add_column("kind")
+    args.add_column("dtype")
+    args.add_column("shape")
+    for row in _arg_rows(plan):
+        args.add_row(*row)
+    console.print(args)
+    console.print()
+
+    result = section("RESULT", header=True)
+    result.add_column("name")
+    result.add_column("dims")
+    result.add_column("dtype")
+    for result_row in _result_rows(plan):
+        result.add_row(*result_row)
+    console.print(result)
+    if not plan.determined:
+        console.print(
+            "[dim]sizes marked '?' are undetermined; discovered by a probe call[/dim]"
+        )
+    console.print()
+
+    if plan.store is not None and plan.store.path is not None:
+        store = section("STORE")
+        store.add_column()
+        store.add_column(justify="right")
+        store.add_row("path", escape(plan.store.path))
+        for dim, width in plan.store.chunks.items():
+            store.add_row(f"chunk {dim}", str(width))
+        store.add_row("regions", str(plan.store.n_regions))
+        console.print(store)
+        note = _store_chunk_note(plan)
+        if note is not None:
+            console.print(f"[dim]{note}[/dim]")
+    else:
+        console.print("[b]STORE[/b]  none (in-memory: no cache, no resume)")
+
+    console.print(f"[b]EXECUTOR[/b]  {plan.executor}")
+    return "\n".join(line.rstrip() for line in buffer.getvalue().split("\n")).strip(
+        "\n"
+    )

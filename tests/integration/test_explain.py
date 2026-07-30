@@ -77,14 +77,14 @@ def test_the_report_shows_counts_batching_and_shapes() -> None:
     )
     text = repr(f.explain(space, n_ph=1000))
 
-    assert "version '3'" in text
-    assert "points       2" in text
-    assert "aot          loop" in text
-    assert "wl           vec" in text
-    assert "srf          const" in text
-    assert "n_ph         static" in text
+    assert "v3" in text
+    assert "points          2" in text
+    assert "aot   loop" in text
+    assert "wl    vec" in text
+    assert "srf   const" in text
+    assert "n_ph  static" in text
     assert "band_int" in text
-    assert "Executor       serial" in text
+    assert "EXECUTOR  serial" in text
 
 
 def test_a_forgotten_dedup_is_visible_before_launching(map_space: xr.Dataset) -> None:
@@ -97,7 +97,7 @@ def test_a_forgotten_dedup_is_visible_before_launching(map_space: xr.Dataset) ->
     without = f.explain(map_space)
     with_dedup = f.explain(map_space, policy=SweepPolicy(dedup=True))
     assert with_dedup.n_calls < without.n_calls
-    assert "dedup        disabled" in repr(without)
+    assert "dedup  disabled" in repr(without)
     assert "unique" in repr(with_dedup)
 
 
