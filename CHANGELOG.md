@@ -1,3 +1,17 @@
+## Unreleased
+
+### Chores
+
+- Add classifiers, keywords and project URLs ([2a4b4b0](https://github.com/walcark/xsweep/commit/2a4b4b08eeadc80aa5c18480ca4791bb7643795a))
+
+### Features
+
+- Let chunks auto-size a named vec batch from a memory budget ([dd15676](https://github.com/walcark/xsweep/commit/dd1567613f8da130b49813a539130b1db030d449))
+
+### Tests
+
+- Cover executor selection and dispatch failures ([4d46b9a](https://github.com/walcark/xsweep/commit/4d46b9ac582687e784d0d302484610a6fe4ab466))
+- Cover the lock's edge cases (100%) ([e48eada](https://github.com/walcark/xsweep/commit/e48eada99484e8b66f2b280a135f9317ddd3aa11))
 ## [0.2.0] - 2026-07-30
 
 ### CI
@@ -30,6 +44,7 @@
 - Record the const, batching, buffering and pickling fixes ([7bab0e7](https://github.com/walcark/xsweep/commit/7bab0e77417e4b9c87985b0868b7b8294ab1ec77))
 - Add a progressive user guide ([0bec484](https://github.com/walcark/xsweep/commit/0bec4843ecfbb2e8ba9978a1fd9365408febffa4))
 - Add badges and a License section to the README ([161a9ae](https://github.com/walcark/xsweep/commit/161a9aeb2d2cc3e62e2d44fabf81f781b2c3e312))
+- Regenerate CHANGELOG.md for v0.2.0 ([0ee1920](https://github.com/walcark/xsweep/commit/0ee19200153164fc4c8ded295528685deeaeb48f))
 
 ### Features
 
