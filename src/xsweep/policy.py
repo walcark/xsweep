@@ -56,6 +56,11 @@ class SweepPolicy:
         resume.
     chunks
         Batch sizes keyed by DIM, overriding any ``@ N`` in the contract.
+    loop_chunks
+        Chunk width per loop dim in the store, overriding the automatic
+        memory-budget sizing. Affects write cost only, never results: a
+        wider chunk means fewer, larger writes, at the price of buffering
+        more computed points in memory before they are flushed.
     dedup
         ``True`` deduplicates over every loop dim, a tuple over the named ones.
     executor
@@ -79,6 +84,7 @@ class SweepPolicy:
 
     store: str | Path | None | _Unset = UNSET
     chunks: Mapping[str, int] | _Unset = UNSET
+    loop_chunks: Mapping[str, int] | _Unset = UNSET
     dedup: bool | tuple[str, ...] | _Unset = UNSET
     executor: str | Any | _Unset = UNSET
     max_workers: int | None | _Unset = UNSET
@@ -95,6 +101,7 @@ class ResolvedPolicy:
 
     store: str | Path | None = None
     chunks: Mapping[str, int] = field(default_factory=dict)
+    loop_chunks: Mapping[str, int] = field(default_factory=dict)
     dedup: bool | tuple[str, ...] = False
     executor: str | Any = "serial"
     max_workers: int | None = None
@@ -166,6 +173,14 @@ def validate(policy: ResolvedPolicy, *, available_dims: tuple[str, ...]) -> None
                 f"chunks names dim {dim!r}, which the space does not have; "
                 f"available dims: {listed}"
             )
+    for dim, size in policy.loop_chunks.items():
+        if dim not in available_dims:
+            raise PolicyError(
+                f"loop_chunks names dim {dim!r}, which the space does not "
+                f"have; available dims: {listed}"
+            )
+        if size < 1:
+            raise PolicyError(f"loop_chunks[{dim!r}] must be >= 1, got {size}")
     if isinstance(policy.dedup, tuple):
         for dim in policy.dedup:
             if dim not in available_dims:

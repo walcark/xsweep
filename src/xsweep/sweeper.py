@@ -11,7 +11,8 @@ from __future__ import annotations
 import functools
 import logging
 import time
-from collections.abc import Callable, Mapping
+from collections import Counter
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -277,26 +278,28 @@ def _run(plan: Plan, target: Sweeper) -> xr.Dataset:
         plan.n_skipped,
     )
 
-    for item in plan.work_items:
-        if item.skipped:
-            store.set_status(item.point_index, SKIPPED)
+    _mark_skipped(plan, store)
 
     n_ok = n_failed = 0
-    outcomes = _stream(plan, target, runnable, probe)
-    for outcome in outcomes:
-        if outcome.data is None:
-            n_failed += 1
-            store.set_status(outcome.item.point_index, FAILED)
-            logger.debug(
-                "point failed index=%s error=%s",
-                outcome.item.point_index,
-                outcome.error,
-            )
-            continue
-        store.write(_region(plan, outcome.item), _placed(plan, outcome))
-        store.set_status(outcome.item.point_index, OK)
-        n_ok += 1
-        logger.debug("point ok index=%s", outcome.item.point_index)
+    buffers = _WriteBuffers(plan, store, runnable)
+    try:
+        for outcome in _stream(plan, target, runnable, probe):
+            if outcome.data is None:
+                n_failed += 1
+                buffers.place(outcome, FAILED)
+                logger.debug(
+                    "point failed index=%s error=%s",
+                    outcome.item.point_index,
+                    outcome.error,
+                )
+                continue
+            buffers.place(outcome, OK)
+            n_ok += 1
+            logger.debug("point ok index=%s", outcome.item.point_index)
+    finally:
+        # Also reached on a raise: whatever is buffered was already computed,
+        # so it is flushed before the exception propagates, not discarded.
+        buffers.flush_all()
 
     # Unconditional: a run that resumes with every representative already
     # computed still has duplicated points to fill, and skipping the pass
@@ -322,9 +325,15 @@ def _stream(
     target: Sweeper,
     runnable: list[WorkItem],
     probe: Outcome | None,
-) -> list[Outcome]:
-    """Dispatch the runnable items, reusing the probe result if there was one."""
+) -> Iterator[Outcome]:
+    """Dispatch the runnable items, reusing the probe result if there was one.
+
+    A generator, not a list: yielding as each outcome completes is what lets
+    `_run` write (or buffer) it immediately, so a later item's failure can
+    never discard an earlier item's already-computed result.
+    """
     if probe is not None:
+        yield probe
         rest = runnable[1:]
     else:
         rest = runnable
@@ -333,8 +342,8 @@ def _stream(
     # A partial rather than a closure: a lambda cannot be pickled, so the
     # process executor would reject every sweep before running a single one.
     call = functools.partial(_call, plan, target)
-    results = [outcome for _, outcome in executor.map_unordered(call, rest)]
-    return ([probe] if probe is not None else []) + results
+    for _, outcome in executor.map_unordered(call, rest):
+        yield outcome
 
 
 def _call(plan: Plan, target: Sweeper, item: WorkItem) -> Outcome:
@@ -377,6 +386,172 @@ def _arrays_for(plan: Plan, item: WorkItem) -> dict[str, xr.DataArray]:
         }
         arrays[const_var.name] = array.isel(selection) if selection else array
     return arrays
+
+
+class _WriteBuffers:
+    """Accumulate outcomes per store chunk, flushing whole chunks at once.
+
+    The loop-dim chunk grid is sized in bytes, not points (Plan.store.chunks),
+    so several work items usually share one chunk. Writing each of them
+    straight into the store would read-modify-write that chunk once per
+    point, and status is no exception: a zarr write's cost is dominated by
+    its fixed per-call overhead, not by the one byte a status code actually
+    carries. Both are buffered the same way: read the chunk once, place
+    every point it produces, write it back once, when every runnable point
+    that chunk owns has an outcome.
+    """
+
+    def __init__(self, plan: Plan, store: Store, runnable: list[WorkItem]) -> None:
+        """Count, per chunk, how many runnable points it still owes."""
+        self.plan = plan
+        self.store = store
+        self.remaining: Counter[tuple[Any, ...]] = Counter(
+            _chunk_key(plan, item) for item in runnable
+        )
+        self.buffers: dict[tuple[Any, ...], dict[str, np.ndarray]] = {}
+        self.status_buffers: dict[tuple[Any, ...], np.ndarray] = {}
+        self.direct = _is_direct(plan)
+
+    def place(self, outcome: Outcome, code: int) -> None:
+        """Place an outcome's data (if any) and status, buffered per chunk."""
+        item = outcome.item
+        key = _chunk_key(self.plan, item)
+        if self.direct:
+            if outcome.data is not None:
+                self.store.write(_region(self.plan, item), _placed(self.plan, outcome))
+            self.store.set_status(item.point_index, code)
+            self._resolve(key)
+            return
+
+        region = _chunk_region(self.plan, item)
+        local = _local_region(self.plan, item, region)
+        if outcome.data is not None:
+            if key not in self.buffers:
+                self.buffers[key] = self.store.read_chunk(region)
+            self.store.place_in_chunk(
+                self.buffers[key], local, _placed(self.plan, outcome)
+            )
+        if key not in self.status_buffers:
+            self.status_buffers[key] = self.store.read_status_chunk(region)
+        index = tuple(local[dim].start for dim in self.plan.loop_dims)
+        self.status_buffers[key][index] = code
+        self._resolve(key)
+
+    def _resolve(self, key: tuple[Any, ...]) -> None:
+        self.remaining[key] -= 1
+        if self.remaining[key] <= 0:
+            self._flush(key)
+
+    def _flush(self, key: tuple[Any, ...]) -> None:
+        self.remaining.pop(key, None)
+        buffer = self.buffers.pop(key, None)
+        status_buffer = self.status_buffers.pop(key, None)
+        if buffer is None and status_buffer is None:
+            return
+        region = _chunk_region_for_key(self.plan, key)
+        if buffer is not None:
+            self.store.flush_chunk(region, buffer)
+        if status_buffer is not None:
+            self.store.flush_status_chunk(region, status_buffer)
+
+    def flush_all(self) -> None:
+        """Write back every chunk still buffered, complete or not."""
+        for key in list(self.remaining):
+            self._flush(key)
+
+
+def _is_direct(plan: Plan) -> bool:
+    """Return whether every loop chunk holds exactly one point.
+
+    A one-point chunk has nothing else to preserve, so reading it before
+    writing back would only add a read no direct write ever paid for.
+    """
+    widths = plan.store.chunks if plan.store else {}
+    return all(widths.get(dim, 1) <= 1 for dim in plan.loop_dims)
+
+
+def _mark_skipped(plan: Plan, store: Store) -> None:
+    """Record every skipped point's status, one write per chunk it touches.
+
+    Skipped points are known entirely from the plan, before any call runs,
+    so they are grouped by chunk directly rather than through the streaming
+    write buffer, which exists to accumulate outcomes as they arrive.
+    """
+    direct = _is_direct(plan)
+    by_chunk: dict[tuple[Any, ...], list[WorkItem]] = {}
+    for item in plan.work_items:
+        if not item.skipped:
+            continue
+        if direct:
+            store.set_status(item.point_index, SKIPPED)
+            continue
+        by_chunk.setdefault(_chunk_key(plan, item), []).append(item)
+
+    for items in by_chunk.values():
+        region = _chunk_region(plan, items[0])
+        buffer = store.read_status_chunk(region)
+        for item in items:
+            local = _local_region(plan, item, region)
+            index = tuple(local[dim].start for dim in plan.loop_dims)
+            buffer[index] = SKIPPED
+        store.flush_status_chunk(region, buffer)
+
+
+def _chunk_key(plan: Plan, item: WorkItem) -> tuple[Any, ...]:
+    """Identify the store chunk a work item's region falls into.
+
+    A chunk is a loop-dim chunk of the grid combined with the item's own
+    batch slices: a batched call dim already writes exactly one chunk per
+    item (FR-010's "batch size is a chunk size"), so items with different
+    batches never share a chunk even at the same loop position.
+    """
+    widths = plan.store.chunks if plan.store else {}
+    loop_part = tuple(
+        pos // widths.get(dim, 1)
+        for dim, pos in zip(plan.loop_dims, item.point_index, strict=True)
+    )
+    batch_part = tuple(sorted((d, sl.start, sl.stop) for d, sl in item.slices.items()))
+    return (loop_part, batch_part)
+
+
+def _chunk_region(plan: Plan, item: WorkItem) -> dict[str, slice]:
+    """Return the global region the whole chunk owning this item covers."""
+    widths = plan.store.chunks if plan.store else {}
+    region: dict[str, slice] = {}
+    for dim, pos, axis in zip(plan.loop_dims, item.point_index, plan.axes, strict=True):
+        width = widths.get(dim, 1)
+        start = (pos // width) * width
+        region[dim] = slice(start, min(start + width, axis.size))
+    region.update(item.slices)
+    return region
+
+
+def _chunk_region_for_key(plan: Plan, key: tuple[Any, ...]) -> dict[str, slice]:
+    """Rebuild a chunk's global region from its key, to flush without an item."""
+    widths = plan.store.chunks if plan.store else {}
+    loop_part, batch_part = key
+    region: dict[str, slice] = {}
+    for dim, cid, axis in zip(plan.loop_dims, loop_part, plan.axes, strict=True):
+        width = widths.get(dim, 1)
+        start = cid * width
+        region[dim] = slice(start, min(start + width, axis.size))
+    for dim, start, stop in batch_part:
+        region[dim] = slice(start, stop)
+    return region
+
+
+def _local_region(
+    plan: Plan, item: WorkItem, chunk_region: Mapping[str, slice]
+) -> dict[str, slice]:
+    """Translate a work item's global region into offsets local to its chunk."""
+    local: dict[str, slice] = {}
+    for dim, pos in zip(plan.loop_dims, item.point_index, strict=True):
+        base = chunk_region[dim].start
+        local[dim] = slice(pos - base, pos - base + 1)
+    for dim, sl in item.slices.items():
+        base = chunk_region[dim].start
+        local[dim] = slice(sl.start - base, sl.stop - base)
+    return local
 
 
 def _region(plan: Plan, item: WorkItem) -> dict[str, slice]:

@@ -84,6 +84,39 @@ def test_only_missing_points_are_recomputed_on_resume(
     assert (result.status.values == 1).all()
 
 
+def test_on_error_raise_still_persists_points_computed_before_the_failure(
+    tmp_path, cartesian_space: xr.Dataset
+) -> None:
+    """A raise loses nothing already computed, even mid-run.
+
+    _stream used to collect every outcome into a list before _run wrote any
+    of them, so a failure discarded every success from earlier in that same
+    run, buffered or not. The write buffer only made this worse to ignore:
+    it needs the same guarantee to flush a partial chunk instead of losing
+    it.
+    """
+    fail = {"active": True}
+    calls: list[tuple[float, float]] = []
+
+    @sweep("loop(a, b) -> out()")
+    def f(a: float, b: float) -> float:
+        calls.append((a, b))
+        if fail["active"] and a == 0.2:
+            raise RuntimeError("engine blew up")
+        return a * b
+
+    store = str(tmp_path / "s.zarr")
+    with pytest.raises(PointFailed):
+        f(cartesian_space, policy=SweepPolicy(store=store, on_error="raise"))
+
+    fail["active"] = False
+    calls.clear()
+    result = f(cartesian_space, policy=SweepPolicy(store=store))
+    assert (0.1, 10.0) not in calls
+    assert len(calls) == 8
+    assert (result.status.values == 1).all()
+
+
 def test_skip_predicate_never_calls_the_function(
     cartesian_space: xr.Dataset,
 ) -> None:

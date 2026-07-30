@@ -205,7 +205,7 @@ def build_plan(
         unique_of=unique_of,
     )
     result = _result_spec(contract, space, grid)
-    store = _store_spec(policy, result, grid.dims, batches, items)
+    store = _store_spec(policy, result, grid.axes, batches, items)
     source_of = _source_map(grid, items) if unique_of is not None else None
     return Plan(
         contract=contract,
@@ -380,21 +380,31 @@ def _result_spec(
     return tuple(specs)
 
 
+#: Memory ceiling for one loop-dim chunk's worth of buffered results, same
+#: role as store.py's _EXPAND_BUDGET: not a policy field, since it never
+#: changes a result, only the cost of writing it.
+_LOOP_CHUNK_BUDGET = 64 * 1024 * 1024
+
+
 def _store_spec(
     policy: ResolvedPolicy,
     result: Sequence[VarSpec],
-    loop_dims: tuple[str, ...],
+    axes: tuple[LoopAxis, ...],
     batches: Mapping[str, tuple[slice, ...]],
     items: Sequence[WorkItem],
 ) -> StoreSpec:
     """Describe the store layout.
 
-    The chunk grid is what makes concurrent region writes safe without any
-    coordination: one along every loop dim, so two writers can never touch
-    the same chunk because they never share a loop point. Along a call dim it
-    is the batch size when batched, the full extent otherwise.
+    Loop dims get a chunk grid sized from a memory budget, or from
+    ``policy.loop_chunks``: a size-1 grid means every point is its own zarr
+    chunk, so a write becomes a read-modify-write of that whole chunk on
+    every single point, which is what execution's write buffer exists to
+    amortise into one read and one write per chunk instead. Along a call
+    dim, the chunk is the batch size when batched (a batch already fills one
+    chunk exactly) or the full extent otherwise.
     """
-    chunks: dict[str, int] = {dim: 1 for dim in loop_dims}
+    chunks: dict[str, int] = _loop_chunk_widths(policy, result, axes)
+    loop_dims = set(chunks)
     for var in result:
         for dim, size in zip(var.dims, var.sizes, strict=True):
             if dim in loop_dims:
@@ -408,6 +418,57 @@ def _store_spec(
         chunks=chunks,
         n_regions=len(items),
     )
+
+
+def _loop_chunk_widths(
+    policy: ResolvedPolicy, result: Sequence[VarSpec], axes: tuple[LoopAxis, ...]
+) -> dict[str, int]:
+    """Pick a chunk width per loop dim: the budget, then the policy override.
+
+    Only the first loop dim is auto-chunked; the others default to their
+    full size, the same shape Store.expand already assumes when it slabs
+    duplicates along the first loop dim only. Any dim can still be set
+    explicitly through ``policy.loop_chunks``, including the first.
+    """
+    loop_dims = tuple(a.name for a in axes)
+    if not loop_dims:
+        return {}
+
+    widths = {dim: axis.size for dim, axis in zip(loop_dims, axes, strict=True)}
+    row_items = 1
+    for axis in axes[1:]:
+        row_items *= axis.size
+    row_bytes = _bytes_per_loop_row(result, len(axes), row_items)
+    first = loop_dims[0]
+    widths[first] = min(axes[0].size, max(1, _LOOP_CHUNK_BUDGET // max(row_bytes, 1)))
+
+    for dim, size in policy.loop_chunks.items():
+        if dim not in widths:
+            raise PolicyError(
+                f"loop_chunks names dim {dim!r}, which is not a loop dim; "
+                f"loop dims are {list(loop_dims)!r}"
+            )
+        widths[dim] = size
+    return widths
+
+
+def _bytes_per_loop_row(
+    result: Sequence[VarSpec], n_loop_dims: int, row_items: int
+) -> int:
+    """Estimate bytes for one row along the first loop dim, other loop dims whole.
+
+    An undetermined call-dim size (still ``None`` before the probe) counts as
+    one: an underestimate biases towards a wider chunk, which only costs a
+    bigger read on the rare contract where the probe reveals a much wider
+    axis, never an incorrect one.
+    """
+    total = 0
+    for var in result:
+        cells = 1
+        for size in var.sizes[n_loop_dims:]:
+            cells *= size if size is not None else 1
+        total += cells * np.dtype(var.dtype).itemsize
+    return total * row_items
 
 
 def _call_signature(

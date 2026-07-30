@@ -1,9 +1,12 @@
 """The store: cache, output and resume are the same artefact.
 
 Results stream into a pre-allocated zarr store, one region per work item.
-That single mechanism is what makes a sweep resumable, memory-bounded and
-safely writable in parallel: the chunk grid is one along every loop dim, so
-two writers never touch the same chunk because they never share a point.
+That single mechanism is what makes a sweep resumable and memory-bounded.
+Execution has exactly one writer, the parent process collecting outcomes, so
+the loop-dim chunk grid is sized from a memory budget rather than pinned to
+one point per chunk: a size-1 grid turns every point's write into a
+read-modify-write of that whole chunk, which execution's write buffer
+amortises into one read and one write per chunk instead.
 
 The cache is not a hash-keyed side table. It is this store, identified by a
 fingerprint over the contract and the statics, and addressed by coordinates.
@@ -135,6 +138,44 @@ def _jsonable(value: Any) -> Any:
     if isinstance(value, (np.datetime64,)):
         return str(value)
     return value
+
+
+def _place(
+    array: Any,
+    dims: tuple[str, ...],
+    region: Mapping[str, slice],
+    name: str,
+    var: xr.DataArray,
+) -> None:
+    """Reshape and place one call's output into an array-like target.
+
+    ``array`` is either a zarr array (direct writes) or an in-memory numpy
+    array (a write buffer): both support the same shape/getitem/setitem
+    surface this needs, so one reshape-and-place implementation serves both.
+    """
+    selection = tuple(region.get(dim, slice(None)) for dim in dims)
+    target = tuple(
+        len(range(*sel.indices(size)))
+        for sel, size in zip(selection, array.shape, strict=True)
+    )
+    # The call output carries only the call dims; the loop dims are length
+    # one in the target, so a reshape places it without any xarray round trip.
+    values = np.asarray(var.values).reshape(target)
+    try:
+        array[selection] = values
+    except (ValueError, IndexError) as exc:
+        expected = tuple(
+            array.shape[i]
+            if dims[i] not in region
+            else region[dims[i]].stop - region[dims[i]].start
+            for i in range(len(dims))
+        )
+        raise StoreError(
+            f"cannot write {name!r} at region {dict(region)!r}: the call "
+            f"returned shape {values.shape} where the store expects "
+            f"{expected}. Every call must return the same shape, which the "
+            "contract declares"
+        ) from exc
 
 
 @dataclass
@@ -281,14 +322,18 @@ class Store:
             "status",
             shape=loop_shape,
             dtype="uint8",
-            chunks=tuple(1 for _ in loop_shape),
+            # Same grid as the loop dims of the result arrays: execution
+            # buffers status writes exactly like data writes, and a status
+            # array chunked finer than what gets flushed would still fan a
+            # single buffered write out into one small write per point.
+            chunks=tuple(chunk_of.get(d, 1) for d in plan.loop_dims),
             dimension_names=plan.loop_dims,
             fill_value=PENDING,
         )
         status.attrs["labels"] = {str(k): v for k, v in STATUS_LABELS.items()}
 
     def write(self, region: Mapping[str, slice], data: xr.Dataset) -> None:
-        """Write one region of the result.
+        """Write one region of the result straight into the zarr arrays.
 
         Parameters
         ----------
@@ -303,44 +348,120 @@ class Store:
         ``Dataset.to_zarr(region=...)``. The xarray path re-validates and
         re-encodes the whole dataset on every call, which measured about ten
         milliseconds per point: at the target scale that is the entire
-        overhead budget spent on bookkeeping. A sweep writes one region per
-        point, thousands of times, so this path has to be thin.
+        overhead budget spent on bookkeeping. Used directly only when the
+        loop-dim chunk grid is one point wide; execution otherwise goes
+        through the buffered path below, since writing straight into a
+        shared chunk here would read-modify-write it once per point.
         """
         dims_of = {spec.name: spec.dims for spec in self.plan.result}
         for name, var in data.data_vars.items():
             array = self.group[str(name)]
             assert isinstance(array, zarr.Array)
             dims = dims_of.get(str(name), tuple(str(d) for d in var.dims))
-            selection = tuple(region.get(dim, slice(None)) for dim in dims)
-            target = tuple(
-                len(range(*sel.indices(size)))
-                for sel, size in zip(selection, array.shape, strict=True)
-            )
-            # The call output carries only the call dims; the loop dims are
-            # length one in the target, so a reshape places it without any
-            # xarray round trip.
-            values = np.asarray(var.values).reshape(target)
-            try:
-                array[selection] = values
-            except (ValueError, IndexError) as exc:
-                expected = tuple(
-                    array.shape[i]
-                    if dims[i] not in region
-                    else region[dims[i]].stop - region[dims[i]].start
-                    for i in range(len(dims))
-                )
-                raise StoreError(
-                    f"cannot write {name!r} at region {dict(region)!r}: the "
-                    f"call returned shape {values.shape} where the store "
-                    f"expects {expected}. Every call must return the same "
-                    "shape, which the contract declares"
-                ) from exc
+            _place(array, dims, region, str(name), var)
+
+    def read_chunk(self, region: Mapping[str, slice]) -> dict[str, np.ndarray]:
+        """Read every result var over a region, to seed a write buffer.
+
+        Parameters
+        ----------
+        region
+            Slice per dim, covering exactly one store chunk.
+
+        Returns
+        -------
+        dict
+            One array per result var, already carrying whatever the store
+            holds there: cached or skipped points read back correctly, since
+            the buffer is written back whole once it is complete.
+        """
+        out: dict[str, np.ndarray] = {}
+        for spec in self.plan.result:
+            array = self.group[spec.name]
+            assert isinstance(array, zarr.Array)
+            selection = tuple(region.get(dim, slice(None)) for dim in spec.dims)
+            out[spec.name] = np.asarray(array[selection])
+        return out
+
+    def place_in_chunk(
+        self,
+        buffer: Mapping[str, np.ndarray],
+        local_region: Mapping[str, slice],
+        data: xr.Dataset,
+    ) -> None:
+        """Place one call's output into a write buffer, at its local offset.
+
+        Parameters
+        ----------
+        buffer
+            The in-memory arrays returned by :meth:`read_chunk`, mutated in
+            place.
+        local_region
+            The work item's region, translated to offsets within the chunk.
+        data
+            The normalised call output.
+        """
+        dims_of = {spec.name: spec.dims for spec in self.plan.result}
+        for name, var in data.data_vars.items():
+            dims = dims_of.get(str(name), tuple(str(d) for d in var.dims))
+            _place(buffer[str(name)], dims, local_region, str(name), var)
+
+    def flush_chunk(
+        self, region: Mapping[str, slice], buffer: Mapping[str, np.ndarray]
+    ) -> None:
+        """Write a filled write buffer back, one call per var.
+
+        Parameters
+        ----------
+        region
+            Slice per dim, covering exactly one store chunk.
+        buffer
+            The in-memory arrays, seeded by :meth:`read_chunk` and filled by
+            :meth:`place_in_chunk`.
+        """
+        dims_of = {spec.name: spec.dims for spec in self.plan.result}
+        for name, values in buffer.items():
+            array = self.group[name]
+            assert isinstance(array, zarr.Array)
+            selection = tuple(region.get(dim, slice(None)) for dim in dims_of[name])
+            array[selection] = values
 
     def set_status(self, index: tuple[int, ...], code: int) -> None:
         """Record the outcome of one loop point."""
         array = self.group["status"]
         assert isinstance(array, zarr.Array)
         array[index if index else ()] = np.uint8(code)
+
+    def read_status_chunk(self, region: Mapping[str, slice]) -> np.ndarray:
+        """Read the status array over a region, to seed a status write buffer.
+
+        Parameters
+        ----------
+        region
+            Slice per dim, covering exactly one store chunk. Only the loop
+            dims are used: status has no call dims of its own.
+        """
+        array = self.group["status"]
+        assert isinstance(array, zarr.Array)
+        selection = tuple(region.get(dim, slice(None)) for dim in self.loop_dims)
+        return np.asarray(array[selection])
+
+    def flush_status_chunk(
+        self, region: Mapping[str, slice], buffer: np.ndarray
+    ) -> None:
+        """Write a filled status write buffer back in one shot.
+
+        Parameters
+        ----------
+        region
+            Slice per dim, covering exactly one store chunk.
+        buffer
+            The in-memory array, seeded by :meth:`read_status_chunk`.
+        """
+        array = self.group["status"]
+        assert isinstance(array, zarr.Array)
+        selection = tuple(region.get(dim, slice(None)) for dim in self.loop_dims)
+        array[selection] = buffer
 
     def expand(
         self, source_of: np.ndarray[tuple[int, ...], np.dtype[np.int64]]

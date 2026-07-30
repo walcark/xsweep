@@ -1,7 +1,8 @@
 """Store discipline: layout, chunk grid, fingerprint and status.
 
-The chunk grid is what makes parallel region writes safe without any
-coordination, so it is checked directly rather than inferred from behaviour.
+The loop-dim chunk grid governs write cost, not concurrency: execution has
+exactly one writer (the parent process collecting results), so the grid is
+sized from a memory budget instead of being pinned to one point per chunk.
 """
 
 from __future__ import annotations
@@ -21,18 +22,76 @@ def _f(a: float, b: float) -> float:
     return a * b
 
 
-def test_chunk_grid_is_one_per_loop_point(
+def test_loop_chunk_grid_defaults_to_a_memory_budget(
     tmp_path, cartesian_space: xr.Dataset
 ) -> None:
-    """One loop point per chunk is what lets two writers never collide."""
+    """A sweep this small fits the whole loop grid in one chunk."""
     store = str(tmp_path / "s.zarr")
     _f(cartesian_space, policy=SweepPolicy(store=store))
 
     group = zarr.open_group(store, mode="r")
     array = group["out"]
     assert isinstance(array, zarr.Array)
-    assert array.chunks == (1, 1)
+    assert array.chunks == (3, 4)
     assert array.shape == (3, 4)
+
+
+def test_loop_chunks_can_be_set_explicitly(
+    tmp_path, cartesian_space: xr.Dataset
+) -> None:
+    """The policy override wins over the memory-budget default."""
+    store = str(tmp_path / "s.zarr")
+    _f(cartesian_space, policy=SweepPolicy(store=store, loop_chunks={"a": 1}))
+
+    group = zarr.open_group(store, mode="r")
+    array = group["out"]
+    assert isinstance(array, zarr.Array)
+    assert array.chunks == (1, 4)
+
+
+def test_a_wide_chunk_flushes_once_not_once_per_point(monkeypatch, tmp_path) -> None:
+    """The whole point of buffering: one flush per chunk, not per point."""
+    from xsweep.store import Store
+
+    calls: list[float] = []
+
+    @sweep("loop(a) -> out()", version="1")
+    def f(a: float) -> float:
+        calls.append(a)
+        return a
+
+    flushes = {"n": 0}
+    original = Store.flush_chunk
+
+    def counting(self: Store, region: object, buffer: object) -> None:
+        flushes["n"] += 1
+        original(self, region, buffer)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Store, "flush_chunk", counting)
+
+    space = xr.Dataset({"a": ("a", np.arange(100.0))})
+    store = str(tmp_path / "s.zarr")
+    f(space, policy=SweepPolicy(store=store, loop_chunks={"a": 100}))
+    assert len(calls) == 100
+    assert flushes["n"] == 1
+
+
+def test_status_shares_the_loop_chunk_grid(
+    tmp_path, cartesian_space: xr.Dataset
+) -> None:
+    """A zarr write's cost is dominated by its per-call overhead, not size.
+
+    Status is one byte per point, but chunking it finer than the data it
+    accompanies would still fan one buffered write out into many small ones,
+    so it follows the exact same grid.
+    """
+    store = str(tmp_path / "s.zarr")
+    _f(cartesian_space, policy=SweepPolicy(store=store))
+
+    group = zarr.open_group(store, mode="r")
+    status = group["status"]
+    assert isinstance(status, zarr.Array)
+    assert status.chunks == (3, 4)
 
 
 def test_status_is_allocated_over_the_loop_dims(
