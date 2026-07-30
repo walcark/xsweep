@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Minimal, content-agnostic parameter sweeps for xarray."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = { text = "Apache-2.0" }
 authors = [{ name = "Kevin Walcarius", email = "kevin.walcarius@gmail.com" }]
 dependencies = [
     "numpy",
