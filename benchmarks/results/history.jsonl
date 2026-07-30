@@ -4,3 +4,5 @@
 {"case": "04_band_integration_srf", "xsweep_version": "0.3.0", "date": "2026-07-30", "host": "fedora", "cpu_count": 16, "n_calls": 80, "wall_time_s": 0.201977}
 {"case": "05_single_scattering_toa_reflectance", "xsweep_version": "0.3.0", "date": "2026-07-30", "host": "fedora", "cpu_count": 16, "n_calls": 27000, "wall_time_s": 2.740674}
 {"case": "06_henyey_greenstein_phase_function", "xsweep_version": "0.3.0", "date": "2026-07-30", "host": "fedora", "cpu_count": 16, "n_calls": 48, "wall_time_s": 0.049171}
+{"case": "07_hyperspectral_cube_memory_scaling_no_dedup", "xsweep_version": "0.3.0", "date": "2026-07-30", "host": "fedora", "cpu_count": 16, "n_calls": 6400, "wall_time_s": 16.527395}
+{"case": "07_hyperspectral_cube_memory_scaling_dedup", "xsweep_version": "0.3.0", "date": "2026-07-30", "host": "fedora", "cpu_count": 16, "n_calls": 8, "wall_time_s": 0.075442}
