@@ -110,6 +110,9 @@ backend and no core path imports it.
 
 ## Documentation
 
+- [Guide](docs/guide.md): a progressive tour, from the smallest sweep to the
+  cost knobs you reach for once a run gets expensive, and why xsweep exists
+  next to `apply_ufunc`.
 - [Design reference](docs/design/xsweep.md): why it is built this way, the
   worked examples, and the alternatives that were rejected.
 - [Idioms](docs/idioms.md): replication seeds, comparing versions,
