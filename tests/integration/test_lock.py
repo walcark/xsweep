@@ -8,6 +8,9 @@ measured in engine hours.
 from __future__ import annotations
 
 import json
+import os
+import signal
+import threading
 
 import numpy as np
 import pytest
@@ -112,3 +115,88 @@ def test_the_in_memory_mode_takes_no_lock(cartesian_space: xr.Dataset) -> None:
     """Nothing is shared, so nothing needs protecting."""
     result = _f(cartesian_space)
     assert (result.status.values == 1).all()
+
+
+def test_releasing_twice_is_a_no_op(tmp_path) -> None:
+    """A second release must not raise or touch a file it no longer owns."""
+    store = tmp_path / "s.zarr"
+    lock = StoreLock(store)
+    lock.acquire()
+    lock.release()
+    assert not lock.path.exists()
+    lock.release()  # already released: must not raise
+
+
+def test_releasing_a_lock_never_acquired_is_a_no_op(tmp_path) -> None:
+    """A lock object that never took the lock has nothing to give back."""
+    StoreLock(tmp_path / "s.zarr").release()
+
+
+def test_the_owner_is_unknown_when_the_lock_file_is_corrupted(tmp_path) -> None:
+    """A refusal must still name something, even if the payload is unreadable."""
+    store = tmp_path / "s.zarr"
+    lock_path = store.with_name(store.name + LOCK_SUFFIX)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.write_text("not json")
+
+    with pytest.raises(StoreLockedError, match="unknown owner"):
+        StoreLock(store).acquire()
+
+
+def test_sigterm_releases_the_lock_and_raises_keyboard_interrupt(tmp_path) -> None:
+    """A killed run must not leave the store locked forever."""
+    store = tmp_path / "s.zarr"
+    lock = StoreLock(store)
+    lock.acquire()
+    try:
+        with pytest.raises(KeyboardInterrupt, match="interrupted by signal"):
+            os.kill(os.getpid(), signal.SIGTERM)
+        assert not lock.path.exists()
+    finally:
+        lock._held = False  # already released by the handler
+
+
+def test_installing_the_handler_off_the_main_thread_degrades_quietly(
+    tmp_path,
+) -> None:
+    """signal.signal() only works on the main thread; a worker must not crash."""
+    store = tmp_path / "s.zarr"
+    outcome: dict[str, object] = {}
+
+    def run() -> None:
+        lock = StoreLock(store)
+        try:
+            lock.acquire()
+            outcome["previous"] = lock._previous
+            lock.release()
+        except Exception as exc:  # noqa: BLE001 - surfaced to the main thread
+            outcome["error"] = exc
+
+    thread = threading.Thread(target=run)
+    thread.start()
+    thread.join()
+
+    assert "error" not in outcome
+    assert outcome["previous"] is None
+
+
+def test_restoring_the_handler_tolerates_a_value_error(tmp_path, monkeypatch) -> None:
+    """A restore that fails (e.g. the thread context shifted) must not crash release().
+
+    signal.signal() only raises ValueError off the main thread, which acquire()
+    already turned into `_previous = None`; forcing a failure here covers the
+    symmetric, harder-to-provoke case where install succeeded but restore does not.
+    """
+    import signal as signal_module
+
+    store = tmp_path / "s.zarr"
+    lock = StoreLock(store)
+    lock.acquire()
+    assert lock._previous is not None
+
+    def broken_signal(signalnum: int, handler: object) -> object:
+        raise ValueError("simulated: cannot restore here")
+
+    monkeypatch.setattr(signal_module, "signal", broken_signal)
+    lock.release()  # must not raise despite the failing restore
+    assert not lock.path.exists()
