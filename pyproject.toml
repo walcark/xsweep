@@ -81,9 +81,21 @@ all = { depends-on = ["fmt", "lint", "type-check", "test"] }
 changelog = "git-cliff -o CHANGELOG.md"
 bench = "python benchmarks/run.py"
 
+# Builds the benchmarks/examples/ gallery into a static site. Separate from
+# `dev` since it pulls in sphinx and is not needed to work on the library.
+[tool.pixi.feature.docs.dependencies]
+sphinx = "*"
+sphinx-gallery = "*"
+pydata-sphinx-theme = "*"
+matplotlib = "*"
+
+[tool.pixi.feature.docs.tasks]
+docs-build = "sphinx-build -b html docs/site docs/site/_build/html"
+
 [tool.pixi.environments]
 default = { solve-group = "default" }
 dev = { features = ["dev"], solve-group = "default" }
+docs = { features = ["docs"], solve-group = "default" }
 
 # --- tooling ----------------------------------------------------------------
 [tool.ruff]
