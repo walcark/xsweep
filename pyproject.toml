@@ -44,6 +44,7 @@ ruff = "*"
 mypy = ">=1.5"
 pytest = "*"
 rich = "*"
+git-cliff = "*"
 
 [tool.pixi.feature.dev.tasks]
 fmt = "ruff format ."
@@ -52,6 +53,7 @@ lint = "ruff check src tests"
 type-check = "mypy src"
 test = "pytest -q"
 all = { depends-on = ["fmt", "lint", "type-check", "test"] }
+changelog = "git-cliff -o CHANGELOG.md"
 
 [tool.pixi.environments]
 default = { solve-group = "default" }
