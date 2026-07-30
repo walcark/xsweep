@@ -1,7 +1,17 @@
 # xsweep
 
-Minimal, content-agnostic parameter sweeps for xarray: lift an expensive
-"point function" into a gridded, cached, resumable xarray computation.
+<p align="center"><em>Content-agnostic parameter sweeps for xarray: lift an
+expensive point function into a gridded, cached, resumable computation.</em></p>
+
+<p align="center">
+  <a href="https://github.com/walcark/xsweep/actions/workflows/ci.yml"><img src="https://github.com/walcark/xsweep/actions/workflows/ci.yml/badge.svg"></a>
+  <img src="https://img.shields.io/badge/python-3.11%2B-blue">
+  <a href="https://pixi.sh"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/prefix-dev/pixi/main/assets/badge/v0.json"></a>
+  <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json"></a>
+  <a href="https://mypy-lang.org/"><img src="https://img.shields.io/badge/mypy-checked-2a6db2"></a>
+  <img src="https://img.shields.io/badge/tested%20with-pytest-0a9edc?logo=pytest&logoColor=white">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
+</p>
 
 The problem it solves is not computing a grid, which xarray already does. It
 is everything around an expensive call: computing each point exactly once,
@@ -125,3 +135,7 @@ backend and no core path imports it.
 v0. Motivating consumers: adjeff (Smart-G sweeps, replacing its internal
 `SweepBundle` and `UniqueIndex`), radtrans (the engine-agnostic half of its
 sweep layer), and short sensitivity studies in Earth observation.
+
+## License
+
+[Apache License 2.0](LICENSE).
