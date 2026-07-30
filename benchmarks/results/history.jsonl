@@ -1,3 +1,4 @@
 {"case": "01_beer_lambert_transmission", "xsweep_version": "0.3.0", "date": "2026-07-30", "host": "fedora", "cpu_count": 16, "n_calls": 500, "wall_time_s": 0.071191}
 {"case": "02_rayleigh_optical_depth_spectrum", "xsweep_version": "0.3.0", "date": "2026-07-30", "host": "fedora", "cpu_count": 16, "n_calls": 20, "wall_time_s": 0.055882}
 {"case": "03_pixel_map_dedup_atmospheric_correction", "xsweep_version": "0.3.0", "date": "2026-07-30", "host": "fedora", "cpu_count": 16, "n_calls": 6, "wall_time_s": 0.04859}
+{"case": "04_band_integration_srf", "xsweep_version": "0.3.0", "date": "2026-07-30", "host": "fedora", "cpu_count": 16, "n_calls": 80, "wall_time_s": 0.201977}
