@@ -137,7 +137,7 @@ def test_undetermined_output_size_is_reported_not_probed() -> None:
     assert "undetermined" in repr(plan)
 
 
-def test_loop_chunks_default_to_the_whole_axis_when_it_fits_the_budget(
+def test_store_chunks_default_to_the_whole_axis_when_it_fits_the_budget(
     cartesian_space: xr.Dataset,
 ) -> None:
     """A small sweep fits its whole loop grid in one chunk."""
@@ -147,7 +147,7 @@ def test_loop_chunks_default_to_the_whole_axis_when_it_fits_the_budget(
     assert plan.store.chunks["b"] == 4
 
 
-def test_loop_chunks_can_be_overridden() -> None:
+def test_store_chunks_can_be_overridden() -> None:
     """The policy field wins over the memory-budget default."""
 
     @sweep("loop(a) -> out()")
@@ -155,13 +155,13 @@ def test_loop_chunks_can_be_overridden() -> None:
         return a
 
     space = xr.Dataset({"a": ("a", [1.0, 2.0, 3.0])})
-    plan = f.explain(space, policy=SweepPolicy(loop_chunks={"a": 1}))
+    plan = f.explain(space, policy=SweepPolicy(store_chunks={"a": 1}))
     assert plan.store is not None
     assert plan.store.chunks["a"] == 1
 
 
-def test_loop_chunks_on_a_non_loop_dim_is_rejected() -> None:
-    """loop_chunks only makes sense for dims the loop grid actually has."""
+def test_store_chunks_on_a_non_loop_dim_is_rejected() -> None:
+    """store_chunks only makes sense for dims the loop grid actually has."""
 
     @sweep("loop(a) vec(wl) -> t(wl)")
     def f(a: float, wl: xr.DataArray) -> xr.DataArray:
@@ -169,7 +169,7 @@ def test_loop_chunks_on_a_non_loop_dim_is_rejected() -> None:
 
     space = xr.Dataset({"a": ("a", [1.0]), "wl": ("wl", np.arange(5.0))})
     with pytest.raises(PolicyError, match="not a loop dim"):
-        f.explain(space, policy=SweepPolicy(loop_chunks={"wl": 2}))
+        f.explain(space, policy=SweepPolicy(store_chunks={"wl": 2}))
 
 
 def test_report_mentions_the_costly_misconfigurations(

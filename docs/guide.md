@@ -152,7 +152,7 @@ purpose:
 The knobs that matter once a sweep gets big:
 
 - `chunks={"wl": 500}` overrides a `vec` batch size, keyed by dim.
-- `loop_chunks={"y": 256}` sizes the store's loop-dim chunk grid; by
+- `store_chunks={"y": 256}` sizes the store's loop-dim chunk grid; by
   default it is sized from a memory budget, not exposed unless you need to
   override it.
 - `executor="process"` / `max_workers=N` parallelises across processes.
@@ -163,7 +163,7 @@ The knobs that matter once a sweep gets big:
 
 ```python
 plain = f(space)
-tuned = f(space, policy=SweepPolicy(dedup=True, loop_chunks={"a": 2}))
+tuned = f(space, policy=SweepPolicy(dedup=True, store_chunks={"a": 2}))
 # tuned costs less to write; plain and tuned agree exactly on every value
 ```
 

@@ -20,7 +20,7 @@ even at large point counts.
 Execution has exactly one writer: the parent process collecting outcomes as
 they complete. The store's loop-dim chunk grid is therefore sized from a
 memory budget (64 MB by default, overridable per dim with
-`SweepPolicy(loop_chunks=...)`), not pinned to one point per chunk. A size-1
+`SweepPolicy(store_chunks=...)`), not pinned to one point per chunk. A size-1
 grid turns every point's write into a read-modify-write of that whole chunk;
 execution's write buffer reads a chunk once, places every point it produces,
 and writes it back once when every runnable point that chunk owns has an
@@ -42,7 +42,7 @@ itself.
 
 One point per chunk is still available, and is what `place()` uses
 automatically whenever every loop dim's chunk width is 1 (including an
-explicit `loop_chunks` override of 1): with nothing else in the chunk to
+explicit `store_chunks` override of 1): with nothing else in the chunk to
 preserve, reading it first would only add a read no direct write pays for.
 
 A wider chunk means more computed-but-unflushed points sit in memory before

@@ -401,7 +401,7 @@ def _store_spec(
     """Describe the store layout.
 
     Loop dims get a chunk grid sized from a memory budget, or from
-    ``policy.loop_chunks``: a size-1 grid means every point is its own zarr
+    ``policy.store_chunks``: a size-1 grid means every point is its own zarr
     chunk, so a write becomes a read-modify-write of that whole chunk on
     every single point, which is what execution's write buffer exists to
     amortise into one read and one write per chunk instead. Along a call
@@ -433,7 +433,7 @@ def _loop_chunk_widths(
     Only the first loop dim is auto-chunked; the others default to their
     full size, the same shape Store.expand already assumes when it slabs
     duplicates along the first loop dim only. Any dim can still be set
-    explicitly through ``policy.loop_chunks``, including the first.
+    explicitly through ``policy.store_chunks``, including the first.
     """
     loop_dims = tuple(a.name for a in axes)
     if not loop_dims:
@@ -447,10 +447,10 @@ def _loop_chunk_widths(
     first = loop_dims[0]
     widths[first] = min(axes[0].size, max(1, _LOOP_CHUNK_BUDGET // max(row_bytes, 1)))
 
-    for dim, size in policy.loop_chunks.items():
+    for dim, size in policy.store_chunks.items():
         if dim not in widths:
             raise PolicyError(
-                f"loop_chunks names dim {dim!r}, which is not a loop dim; "
+                f"store_chunks names dim {dim!r}, which is not a loop dim; "
                 f"loop dims are {list(loop_dims)!r}"
             )
         widths[dim] = size
@@ -578,10 +578,10 @@ def _result_rows(plan: Plan) -> list[tuple[str, str, str]]:
 
 
 def _store_chunk_note(plan: Plan) -> str | None:
-    """Return a note naming any loop_chunks override, or ``None`` if all auto."""
+    """Return a note naming any store_chunks override, or ``None`` if all auto."""
     if plan.store is None:
         return None
-    overrides = sorted(plan.policy.loop_chunks)
+    overrides = sorted(plan.policy.store_chunks)
     if not overrides:
         return None
     return "overridden: " + ", ".join(overrides)

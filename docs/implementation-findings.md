@@ -241,13 +241,13 @@ that cost was paid once per point instead of once per chunk.
 
 The fix implemented: the store's loop-dim chunk grid is now sized from a
 memory budget (64 MB by default), not pinned to one point per chunk, and
-overridable per dim with `SweepPolicy(loop_chunks=...)`. Execution buffers
+overridable per dim with `SweepPolicy(store_chunks=...)`. Execution buffers
 outcomes per chunk, reading it once, placing every point it produces, and
 writing it back once when every runnable point that chunk owns has an
 outcome, so a wider grid amortises the read-modify-write across a whole
 chunk instead of paying it per point. A one-point chunk (the default's
 floor when a row is wide relative to the budget, or an explicit
-`loop_chunks` override of 1) skips the read entirely and writes straight
+`store_chunks` override of 1) skips the read entirely and writes straight
 through, matching the old cost exactly: nothing else can share that chunk,
 so there is nothing to preserve.
 

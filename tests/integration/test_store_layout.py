@@ -36,12 +36,12 @@ def test_loop_chunk_grid_defaults_to_a_memory_budget(
     assert array.shape == (3, 4)
 
 
-def test_loop_chunks_can_be_set_explicitly(
+def test_store_chunks_can_be_set_explicitly(
     tmp_path, cartesian_space: xr.Dataset
 ) -> None:
     """The policy override wins over the memory-budget default."""
     store = str(tmp_path / "s.zarr")
-    _f(cartesian_space, policy=SweepPolicy(store=store, loop_chunks={"a": 1}))
+    _f(cartesian_space, policy=SweepPolicy(store=store, store_chunks={"a": 1}))
 
     group = zarr.open_group(store, mode="r")
     array = group["out"]
@@ -71,7 +71,7 @@ def test_a_wide_chunk_flushes_once_not_once_per_point(monkeypatch, tmp_path) -> 
 
     space = xr.Dataset({"a": ("a", np.arange(100.0))})
     store = str(tmp_path / "s.zarr")
-    f(space, policy=SweepPolicy(store=store, loop_chunks={"a": 100}))
+    f(space, policy=SweepPolicy(store=store, store_chunks={"a": 100}))
     assert len(calls) == 100
     assert flushes["n"] == 1
 
