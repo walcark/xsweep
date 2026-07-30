@@ -1,10 +1,19 @@
-## Unreleased
+## [0.2.0] - 2026-07-30
+
+### CI
+
+- Run the full pixi gate on push and pull request ([8cb0118](https://github.com/walcark/xsweep/commit/8cb011801eee4a4e41f3824eebd43f15934b65b3))
+- Wire up Codecov and its README badge ([bd9da6f](https://github.com/walcark/xsweep/commit/bd9da6f6fbd4166807ae5531afa70462c2ce04dc))
 
 ### Chores
 
 - Add project tooling and test fixtures ([ec026bd](https://github.com/walcark/xsweep/commit/ec026bdaba7c42ed53fa76a0359c41a4506b30ed))
 - Init spec-kit scaffolding ([954b8a1](https://github.com/walcark/xsweep/commit/954b8a1f8c4be04ab12b1f41fccea2bc56981b09))
 - Relicense under Apache-2.0 ([25a5b0a](https://github.com/walcark/xsweep/commit/25a5b0a1b3681c633ef64c550dcce037cfea462b))
+- Generate CHANGELOG.md with git-cliff ([48d746f](https://github.com/walcark/xsweep/commit/48d746f5d05ea32f070135922e38845a5a708026))
+- Stop ignoring pixi.lock ([fac899a](https://github.com/walcark/xsweep/commit/fac899a201230855d3e46608b4fe145a6682b6ff))
+- Correct the author's name to Kévin Walcarius ([863ecd8](https://github.com/walcark/xsweep/commit/863ecd8f2d1e80fb036bdac9cb16f07e882ac08a))
+- Bump version to 0.2.0 ([7ee9df9](https://github.com/walcark/xsweep/commit/7ee9df913804f0e847747c9a4238df16fae7e76c))
 
 ### Documentation
 
@@ -20,6 +29,7 @@
 - Add runnable example scripts ([4d676df](https://github.com/walcark/xsweep/commit/4d676df0122b5995a483c4df2122a529ab4e7ee4))
 - Record the const, batching, buffering and pickling fixes ([7bab0e7](https://github.com/walcark/xsweep/commit/7bab0e77417e4b9c87985b0868b7b8294ab1ec77))
 - Add a progressive user guide ([0bec484](https://github.com/walcark/xsweep/commit/0bec4843ecfbb2e8ba9978a1fd9365408febffa4))
+- Add badges and a License section to the README ([161a9ae](https://github.com/walcark/xsweep/commit/161a9aeb2d2cc3e62e2d44fabf81f781b2c3e312))
 
 ### Features
 
