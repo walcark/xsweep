@@ -7,7 +7,7 @@ import pytest
 import xarray as xr
 
 from xsweep import SweepPolicy, sweep
-from xsweep.errors import ContractError
+from xsweep.errors import ContractError, SpaceError
 
 
 def test_batches_respect_the_declared_maximum() -> None:
@@ -90,6 +90,67 @@ def test_multi_dim_vec_runs_whole_then_tiled_with_the_same_result() -> None:
     tiled = combine(space, policy=SweepPolicy(chunks={"y": 4, "x": 4}), k=2.0)
     assert calls["n"] == 4
     assert np.array_equal(whole.C.values, tiled.C.values)
+
+
+def test_const_auto_aligns_to_a_shared_batched_dim() -> None:
+    """A const sharing a batched dim follows it, avoiding a shape mismatch."""
+    b_shapes: list[tuple[int, ...]] = []
+
+    @sweep("vec(A) const(B) -> C(y, x)")
+    def combine(A: xr.DataArray, B: xr.DataArray) -> xr.DataArray:
+        b_shapes.append(B.shape)
+        return A + B
+
+    rng = np.random.default_rng(2)
+    space = xr.Dataset(
+        {
+            "A": (("y", "x"), rng.random((8, 8))),
+            "B": (("y", "x"), rng.random((8, 8))),
+        }
+    )
+    whole = combine(space)
+    b_shapes.clear()
+    tiled = combine(space, policy=SweepPolicy(chunks={"y": 4, "x": 4}))
+    assert b_shapes == [(4, 4)] * 4
+    assert np.array_equal(whole.C.values, tiled.C.values)
+
+
+def test_const_protected_dims_ignore_the_batch() -> None:
+    """Dims named in const(name(dims)) never slice, whatever chunks says."""
+    b_shapes: list[tuple[int, ...]] = []
+
+    @sweep("vec(A) const(B(y, x)) -> C(y, x)")
+    def combine(A: xr.DataArray, B: xr.DataArray) -> xr.DataArray:
+        b_shapes.append(B.shape)
+        y, x = A.sizes["y"], A.sizes["x"]
+        return A + B.isel(y=slice(0, y), x=slice(0, x))
+
+    rng = np.random.default_rng(3)
+    space = xr.Dataset(
+        {
+            "A": (("y", "x"), rng.random((8, 8))),
+            "B": (("y", "x"), rng.random((8, 8))),
+        }
+    )
+    combine(space, policy=SweepPolicy(chunks={"y": 4, "x": 4}))
+    assert b_shapes == [(8, 8)] * 4
+
+
+def test_const_protecting_an_unknown_dim_is_rejected() -> None:
+    """A typo in a protected dim is caught before any call, not silently."""
+
+    @sweep("vec(A) const(B(z)) -> C(y, x)")
+    def combine(A: xr.DataArray, B: xr.DataArray) -> xr.DataArray:
+        return A + B
+
+    space = xr.Dataset(
+        {
+            "A": (("y", "x"), np.ones((2, 2))),
+            "B": (("y", "x"), np.ones((2, 2))),
+        }
+    )
+    with pytest.raises(SpaceError, match="does not carry"):
+        combine(space)
 
 
 def test_a_scalar_engine_and_a_vector_engine_agree_on_the_same_data() -> None:

@@ -362,14 +362,20 @@ def _call(plan: Plan, target: Sweeper, item: WorkItem) -> Outcome:
 
 
 def _arrays_for(plan: Plan, item: WorkItem) -> dict[str, xr.DataArray]:
-    """Slice the vec variables for this item; const variables pass whole."""
+    """Slice vec variables, and const variables on any unprotected shared dim."""
     arrays: dict[str, xr.DataArray] = {}
     for var in plan.contract.vec:
         array = plan.space[var.name]
         selection = {dim: sl for dim, sl in item.slices.items() if dim in array.dims}
         arrays[var.name] = array.isel(selection) if selection else array
-    for name in plan.contract.const:
-        arrays[name] = plan.space[name]
+    for const_var in plan.contract.const:
+        array = plan.space[const_var.name]
+        selection = {
+            dim: sl
+            for dim, sl in item.slices.items()
+            if dim in array.dims and dim not in const_var.protected
+        }
+        arrays[const_var.name] = array.isel(selection) if selection else array
     return arrays
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from xsweep.contract import Contract, LoopVar, OutVar, VecVar
+from xsweep.contract import ConstVar, Contract, LoopVar, OutVar, VecVar
 from xsweep.errors import ContractError
 
 
@@ -13,8 +13,21 @@ def test_full_contract() -> None:
     c = Contract.parse("loop(aot, rh, sza) vec(wl @ 8) const(srf) -> t(wl)")
     assert c.loop == (LoopVar("aot"), LoopVar("rh"), LoopVar("sza"))
     assert c.vec == (VecVar("wl", 8),)
-    assert c.const == ("srf",)
+    assert c.const == (ConstVar("srf"),)
     assert c.out == (OutVar("t", ("wl",), (None,)),)
+
+
+def test_const_protected_dims() -> None:
+    """A const variable may protect specific dims from batch alignment."""
+    c = Contract.parse("loop(a) vec(wl) const(srf, bias(x, y)) -> t(wl)")
+    assert c.const == (ConstVar("srf"), ConstVar("bias", ("x", "y")))
+
+
+def test_const_protected_dims_render_round_trips() -> None:
+    """The protected-dims form renders back to an equal contract."""
+    c = Contract.parse("loop(a) const(bias(x, y)) -> t()")
+    assert Contract.parse(c.render()) == c
+    assert "bias(x, y)" in c.render()
 
 
 def test_scalar_output_has_no_dims() -> None:

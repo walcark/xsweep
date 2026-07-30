@@ -147,6 +147,16 @@ def validate_space(space: xr.Dataset, contract: Contract) -> None:
                 "mapping as a static exposing __cache_token__"
             )
 
+    for const_var in contract.const:
+        dims = set(map(str, space[const_var.name].dims))
+        unknown = [d for d in const_var.protected if d not in dims]
+        if unknown:
+            raise SpaceError(
+                f"const {const_var.name!r} protects dim(s) {unknown!r}, which "
+                f"it does not carry in the space; its dims are "
+                f"{sorted(dims)!r}"
+            )
+
 
 def build_grid(space: xr.Dataset, contract: Contract) -> LoopGrid:
     """Enumerate the loop grid implied by a contract and a space.

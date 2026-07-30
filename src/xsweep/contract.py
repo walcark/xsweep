@@ -21,7 +21,7 @@ from typing import Literal
 
 from .errors import ContractError
 
-__all__ = ["Contract", "LoopVar", "OutVar", "VecVar"]
+__all__ = ["Contract", "ConstVar", "LoopVar", "OutVar", "VecVar"]
 
 _CLAUSES = ("loop", "vec", "const")
 _TOKEN_RE = re.compile(
@@ -85,6 +85,25 @@ class VecVar:
 
 
 @dataclass(frozen=True)
+class ConstVar:
+    """A variable handed whole to every call, except its protected dims.
+
+    Parameters
+    ----------
+    name
+        Variable name in the space.
+    protected
+        Dims of this variable that must never be sliced, even when they
+        coincide with a batched vec dim elsewhere in the space. Every other
+        shared dim is auto-aligned to the active batch instead of causing a
+        shape mismatch inside the callable.
+    """
+
+    name: str
+    protected: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class OutVar:
     """A named output with its call-level dims.
 
@@ -116,7 +135,9 @@ class Contract:
     vec
         Variables consumed as vectors, possibly in batches.
     const
-        Variables handed whole to every call.
+        Variables handed whole to every call, except any dim also carried by
+        a batched vec variable, which is auto-aligned to the active batch
+        unless the dim is declared protected on that ``ConstVar``.
     out
         Named outputs with their call-level dims.
     version
@@ -128,7 +149,7 @@ class Contract:
 
     loop: tuple[LoopVar, ...] = ()
     vec: tuple[VecVar, ...] = ()
-    const: tuple[str, ...] = ()
+    const: tuple[ConstVar, ...] = ()
     out: tuple[OutVar, ...] = ()
     version: str = "0"
 
@@ -138,7 +159,7 @@ class Contract:
         return (
             tuple(v.name for v in self.loop)
             + tuple(v.name for v in self.vec)
-            + self.const
+            + tuple(v.name for v in self.const)
         )
 
     @property
@@ -192,7 +213,11 @@ class Contract:
             ]
             parts.append(f"vec({', '.join(items)})")
         if self.const:
-            parts.append(f"const({', '.join(self.const)})")
+            items = [
+                v.name if not v.protected else f"{v.name}({', '.join(v.protected)})"
+                for v in self.const
+            ]
+            parts.append(f"const({', '.join(items)})")
         outs = ", ".join(f"{o.name}({', '.join(o.dims)})" for o in self.out)
         return f"{' '.join(parts)} -> {outs}".strip()
 
@@ -282,7 +307,7 @@ class _Parser:
 
         loop = tuple(LoopVar(str(n)) for n in clauses.get("loop", ()))
         vec = tuple(v for v in clauses.get("vec", ()) if isinstance(v, VecVar))
-        const = tuple(str(n) for n in clauses.get("const", ()))
+        const = tuple(v for v in clauses.get("const", ()) if isinstance(v, ConstVar))
         return Contract(loop=loop, vec=vec, const=const, out=out, version=version)
 
     def _clause_body(self, clause: str) -> list[object]:
@@ -299,27 +324,35 @@ class _Parser:
                     if max_batch < 1:
                         raise ContractError(f"batch size must be >= 1, got {max_batch}")
                 items.append(VecVar(tok.text, max_batch))
+            elif clause == "const":
+                protected = self._dim_list() if self._peek_kind() == "lparen" else ()
+                items.append(ConstVar(tok.text, protected))
             else:
                 items.append(tok.text)
             if self._peek_kind() != "comma":
                 return items
             self._next()
 
+    def _dim_list(self) -> tuple[str, ...]:
+        """Parse a parenthesized, possibly empty, comma-separated dim list."""
+        self._expect("lparen", "'(' after the variable name")
+        dims: list[str] = []
+        if self._peek_kind() != "rparen":
+            while True:
+                dims.append(self._expect("name", "a dim name").text)
+                if self._peek_kind() != "comma":
+                    break
+                self._next()
+        self._expect("rparen", "')' closing the dim list")
+        return tuple(dims)
+
     def _outputs(self) -> tuple[OutVar, ...]:
         """Parse the output clause: one or more ``name(dims)`` entries."""
         outs: list[OutVar] = []
         while True:
             name = self._expect("name", "an output name")
-            self._expect("lparen", "'(' after the output name")
-            dims: list[str] = []
-            if self._peek_kind() != "rparen":
-                while True:
-                    dims.append(self._expect("name", "a dim name").text)
-                    if self._peek_kind() != "comma":
-                        break
-                    self._next()
-            self._expect("rparen", "')' closing the output dims")
-            outs.append(OutVar(name.text, tuple(dims), (None,) * len(dims)))
+            dims = self._dim_list()
+            outs.append(OutVar(name.text, dims, (None,) * len(dims)))
             if self._peek_kind() != "comma":
                 break
             self._next()
@@ -380,7 +413,7 @@ def _check_coherence(contract: Contract) -> None:
     for clause, names in (
         ("loop", [v.name for v in contract.loop]),
         ("vec", [v.name for v in contract.vec]),
-        ("const", list(contract.const)),
+        ("const", [v.name for v in contract.const]),
     ):
         for name in names:
             if name in seen:

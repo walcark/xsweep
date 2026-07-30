@@ -425,9 +425,15 @@ def _call_signature(
             for d in map(str, var.dims)
         )
         specs.append(ArgSpec(vec_var.name, "vec", str(var.dtype), shape))
-    for name in contract.const:
-        var = space[name]
-        specs.append(ArgSpec(name, "const", str(var.dtype), tuple(var.shape)))
+    for const_var in contract.const:
+        var = space[const_var.name]
+        shape = tuple(
+            (batches[d][0].stop - batches[d][0].start)
+            if d in batches and d not in const_var.protected
+            else int(var.sizes[d])
+            for d in map(str, var.dims)
+        )
+        specs.append(ArgSpec(const_var.name, "const", str(var.dtype), shape))
     for name, value in statics.items():
         specs.append(ArgSpec(name, "static", type(value).__name__, None))
     return tuple(specs)

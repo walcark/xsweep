@@ -34,7 +34,9 @@ def assemble_args(
     loop_values
         Native Python values for the loop variables at this point.
     arrays
-        Vec variables sliced to the current batch, and const variables whole.
+        Vec variables sliced to the current batch, and const variables whole
+        except on any dim they share with an active batch and do not
+        protect.
     statics
         Configuration forwarded verbatim to every call.
 
@@ -51,8 +53,8 @@ def assemble_args(
         )
     for vec_var in contract.vec:
         args[vec_var.name] = arrays[vec_var.name]
-    for name in contract.const:
-        args[name] = arrays[name]
+    for const_var in contract.const:
+        args[const_var.name] = arrays[const_var.name]
     args.update(statics)
     return args
 
