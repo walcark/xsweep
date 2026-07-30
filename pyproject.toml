@@ -79,6 +79,7 @@ type-check = "mypy src"
 test = "pytest -q --cov=xsweep --cov-report=term-missing --cov-report=xml"
 all = { depends-on = ["fmt", "lint", "type-check", "test"] }
 changelog = "git-cliff -o CHANGELOG.md"
+bench = "python benchmarks/run.py"
 
 [tool.pixi.environments]
 default = { solve-group = "default" }
