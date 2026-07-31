@@ -1,7 +1,7 @@
 # Idioms
 
-Two situations xsweep deliberately solves with a convention rather than with
-machinery. Both are tested in `tests/integration/test_idioms.py`.
+Three situations xsweep deliberately solves with a convention rather than
+with machinery. All are tested in `tests/integration/test_idioms.py`.
 
 ## Replication: the seed carrier variable
 
@@ -92,3 +92,9 @@ rho(space, policy=SweepPolicy(store="runs/rho.zarr"), profiles=Profiles("v1", ta
 
 Without `__cache_token__` the static is refused outright, because a cache
 that cannot tell when its inputs changed is worse than no cache.
+
+---
+
+The seed carrier is worked in
+[replication](../auto_examples/10_replication_and_the_seed.rst), which also
+shows the collapse that happens when the repetitions are not made distinct.

@@ -68,7 +68,8 @@ html_theme_options = {
     "color_mode": "auto",
     "github_url": "https://github.com/walcark/xsweep",
     "nav_links": [
-        {"title": "Guide", "url": "guide"},
+        {"title": "Why", "url": "why"},
+        {"title": "Guide", "url": "guide/contract"},
         {"title": "Examples", "url": "auto_examples/index"},
         {"title": "Reference", "url": "reference/api"},
     ],

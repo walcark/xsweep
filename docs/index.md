@@ -7,11 +7,11 @@ layout: landing
 Content-agnostic parameter sweeps for xarray: lift an expensive point
 function into a gridded, cached, resumable computation.
 
-```{button-ref} guide
+```{button-ref} why
 :color: primary
 :class: sd-rounded-pill
 
-Read the guide
+Why xsweep
 ```
 
 ```{button-link} https://github.com/walcark/xsweep
@@ -34,7 +34,7 @@ xsweep is that loop, written once.
 :gutter: 3
 
 :::{grid-item-card} Know the cost first
-:link: guide
+:link: guide/plan
 :link-type: doc
 
 `explain()` resolves the whole sweep and stops. Axes, call count, batches,
@@ -43,7 +43,7 @@ the first call.
 :::
 
 :::{grid-item-card} Cache, output and resume in one artefact
-:link: guide
+:link: guide/store
 :link-type: doc
 
 Results stream into a zarr store as they land. Interrupt at point 4000 of
@@ -51,7 +51,7 @@ Results stream into a zarr store as they land. Interrupt at point 4000 of
 :::
 
 :::{grid-item-card} Never compute the same point twice
-:link: guide
+:link: guide/dedup
 :link-type: doc
 
 A satellite scene has far fewer distinct parameter rows than pixels.
@@ -59,7 +59,7 @@ Deduplication computes each unique row once and expands the result back.
 :::
 
 :::{grid-item-card} Semantics from xarray, not from a DSL
-:link: guide
+:link: guide/semantics
 :link-type: doc
 
 Variables sharing a dim vary together; variables on distinct dims multiply.
@@ -70,9 +70,22 @@ The arrays already say it, so the contract never repeats it.
 
 ```{toctree}
 :hidden:
+
+why
+install
+```
+
+```{toctree}
+:hidden:
 :caption: Guide
 
-guide
+guide/contract
+guide/semantics
+guide/plan
+guide/store
+guide/dedup
+guide/policy
+guide/module
 guide/idioms
 ```
 
