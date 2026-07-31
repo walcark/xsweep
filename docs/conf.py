@@ -43,7 +43,10 @@ sphinx_gallery_conf = {
     "examples_dirs": "../examples",
     "gallery_dirs": "auto_examples",
     "filename_pattern": r"/\d+_",
-    "ignore_pattern": r"/_",
+    # Matched against the file name, so this skips the shared helpers
+    # (_solvers.py, _scene.py) that the examples import but that are not
+    # examples themselves.
+    "ignore_pattern": r"^_.*\.py$",
     "within_subsection_order": "FileNameSortKey",
     "download_all_examples": False,
     "remove_config_comments": True,
