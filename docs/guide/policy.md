@@ -13,12 +13,12 @@ is most of what makes a sweep readable a year later:
 - **Data** is the space and the statics, given at the call.
 
 ```python
-@sweep("loop(tau, ssa) -> reflectance()", dedup=True)   # default
+@sweep("loop(tau, ssa) -> reflectance()", dedup=True)  # default
 def layer(tau, ssa): ...
 
 
-layer(space)                                        # deduplicated
-layer(space, policy=SweepPolicy(dedup=False))       # not
+layer(space)  # deduplicated
+layer(space, policy=SweepPolicy(dedup=False))  # not
 ```
 
 ## The knobs

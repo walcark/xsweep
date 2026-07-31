@@ -56,7 +56,9 @@ engine(one_representative_point)
 per_call = time.perf_counter() - start
 
 plan = layer.explain(space, policy=policy)
-print(f"{plan.n_to_compute} calls x {per_call:.1f} s = {plan.n_to_compute * per_call / 3600:.1f} h")
+print(
+    f"{plan.n_to_compute} calls x {per_call:.1f} s = {plan.n_to_compute * per_call / 3600:.1f} h"
+)
 ```
 
 `n_to_compute` is the honest number: it excludes what the store already has

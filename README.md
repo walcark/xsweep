@@ -15,36 +15,33 @@ expensive point function into a gridded, cached, resumable computation.</em></p>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
 </p>
 
-The problem it solves is not computing a grid, which xarray already does. It
-is everything around an expensive call: computing each point exactly once,
-keeping the results, surviving a failure at point 4000 of 5000, and knowing
-what a run will cost before launching it.
+**[Documentation and examples](https://walcark.github.io/xsweep/)**
+
+Some functions cannot be vectorised along the dims you want to sweep: a
+Monte-Carlo solver, an iterative scheme whose stopping point depends on the
+data, an external engine that takes one configuration at a time. numpy has
+nothing to offer there, and the loop you write instead quietly grows a cache,
+a resume path, a deduplication table and a way to guess how long it will all
+take.
+
+xsweep is that loop, written once.
 
 ```python
 import numpy as np, xarray as xr
 from xsweep import sweep, SweepPolicy
 
 
-@sweep(
-    "loop(aot, rh, sza) vec(wl @ 8) -> tdir(wl)", store="runs/tdir.zarr", version="1"
-)
-def tdir(
-    aot: float, rh: float, sza: float, wl: xr.DataArray, *, n_ph: int
-) -> xr.DataArray:
-    return run_engine(aot, rh, sza, wl, n_ph)  # subprocess, GPU kernel, ...
+@sweep("loop(tau, ssa) -> reflectance()", store="runs/layer.zarr", version="1")
+def layer(tau: float, ssa: float) -> float:
+    return monte_carlo(tau, ssa, n_photons=int(1e6))  # subprocess, GPU kernel, ...
 
 
 space = xr.Dataset(
-    {
-        "aot": ("aot", [0.05, 0.1, 0.3]),
-        "rh": ("rh", [30.0, 70.0]),
-        "sza": ("sza", [0.0, 30.0, 60.0]),
-        "wl": ("wl", np.arange(400.0, 900.0, 5.0)),
-    }
+    {"tau": ("tau", np.linspace(0.1, 3.0, 40)), "ssa": ("ssa", [0.9, 0.95, 1.0])}
 )
 
-print(tdir.explain(space, n_ph=int(1e6)))  # what it will cost, zero calls
-result = tdir(space, n_ph=int(1e6))  # tdir(aot: 3, rh: 2, sza: 3, wl: 100)
+print(layer.explain(space))  # what it will cost, zero calls
+result = layer(space)  # reflectance(tau: 40, ssa: 3)
 ```
 
 Re-running that sweep makes zero calls. Interrupt it and relaunch: only the
@@ -53,88 +50,46 @@ missing points are recomputed.
 ## The three ideas
 
 **Semantics come from xarray, not from a second description.** Variables
-sharing a dim vary together (zip); variables on distinct dims multiply
-(Cartesian product). The arrays already encode it, so the contract never
-repeats it.
+sharing a dim vary together; variables on distinct dims multiply. A 1000 x
+1000 map is a million zipped points, not a trillion product ones.
 
-```python
-# a 1000 x 1000 map: one million zipped points, not a trillion product ones
-space = xr.Dataset({"aot": (("y", "x"), aot_map), "rh": (("y", "x"), rh_map)})
-```
-
-**The contract describes the CALL, not the data.** It says how each variable
-is consumed, and names what one call produces:
-
-```
-loop(aot, rh, sza)   one value per call, as a native Python scalar
-vec(wl @ 8)          a whole axis, or batches of at most 8
-const(srf)           context data, handed whole to every call
--> tdir(wl)          named outputs, with their call-level dims
-```
-
-The same data admits different contracts depending on the callee: a
-scalar-only engine wants `loop(A, B) -> C()`, an internally vectorised one
-wants `vec(A, B) -> C(y, x)`. The contract encodes a property of the physics.
+**The contract describes the call, not the data.** `loop` is one value per
+call, `vec` a whole axis, `const` context handed over unchanged, and the
+arrow names what one call produces. The same contract reads a parameter study
+and a satellite scene.
 
 **Cache, output and resume are the same artefact.** Results stream into a
-pre-allocated zarr store, one region per point, with a `status` sidecar
-variable. That single mechanism gives memoisation, bounded memory,
-resumability and safe parallel writes at once.
+zarr store with a `status` sidecar, which gives memoisation, bounded memory,
+resumability and safe parallel writes at once. Deduplication, batch sizes and
+executors are cost decisions on top, and a release gate enforces that they
+never move a value.
 
-## Policy never changes the result
-
-Deduplication, batch sizes, executors and the store are cost decisions. They
-never move a value, a dim or a shape, and a parametrised suite enforces that
-as a release gate.
-
-```python
-result = rho(space)  # one call per pixel
-result = rho(space, policy=SweepPolicy(dedup=True))  # one per unique row
-```
-
-## As a class
-
-```python
-class RhoAtm(SweepModule):
-    contract = "loop(aot, rh, sza) vec(wl @ 8) -> rho_atm(wl)"
-
-    def forward(self, aot, rh, sza, wl, *, n_ph):
-        return run_engine(aot, rh, sza, wl, n_ph)
-
-
-mod = RhoAtm(SweepPolicy(store="runs/rho.zarr", dedup=True, executor="process"))
-result = mod(space, n_ph=int(1e6))
-```
-
-Physics in `forward`, orchestration in `__call__`, run configuration at
-instantiation. A malformed contract raises when the module is imported, not
-after twenty minutes of engine time.
-
-## Install and develop
+## Install
 
 ```bash
-pixi install
-pixi run -e dev all      # fmt, lint, type-check, test
+pip install xsweep
 ```
 
 Python 3.11+, with xarray, zarr and numpy. Dask is an optional executor
 backend and no core path imports it.
 
+To work on xsweep itself: `pixi install && pixi run -e dev all`.
+
 ## Documentation
 
-- [Examples](https://walcark.github.io/xsweep/): a gallery of worked type
-  cases (remote sensing / radiative transfer), each with its equations,
-  actual output, and timing tracked across releases
-  ([current numbers](benchmarks/results/TIMING.md)).
-- [Guide](docs/guide.md): a progressive tour, from the smallest sweep to the
-  cost knobs you reach for once a run gets expensive, and why xsweep exists
-  next to `apply_ufunc`.
-- [Design reference](docs/design/xsweep.md): why it is built this way, the
-  worked examples, and the alternatives that were rejected.
-- [Idioms](docs/idioms.md): replication seeds, comparing versions,
-  object-valued parameters.
-- [Limitations](docs/limitations.md): what v0 deliberately does not do.
-- [Specification](specs/001-xsweep-v0/): requirements, plan and tasks.
+Everything lives on the site: **<https://walcark.github.io/xsweep/>**
+
+- [Why xsweep](https://walcark.github.io/xsweep/why.html), including when it
+  is the wrong tool
+- [Examples](https://walcark.github.io/xsweep/auto_examples/index.html): ten
+  pages, one idea each, on a real Monte-Carlo solver, with the actual output
+  of every run
+- [Guide](https://walcark.github.io/xsweep/guide/contract.html) and
+  [API reference](https://walcark.github.io/xsweep/reference/api.html)
+- [Limitations](https://walcark.github.io/xsweep/reference/limitations.html):
+  what v0 deliberately does not do
+- [Benchmarks](https://walcark.github.io/xsweep/benchmarks.html): per-point
+  cost tracked across releases
 
 ## Status
 

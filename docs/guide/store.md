@@ -32,8 +32,8 @@ call it again with the same store; a fresh run against a finished store makes
 zero calls and costs a read.
 
 ```python
-layer(space, policy=policy)   # 60 calls
-layer(space, policy=policy)   # 0 calls
+layer(space, policy=policy)  # 60 calls
+layer(space, policy=policy)  # 0 calls
 ```
 
 Because the points that succeeded are read back rather than recomputed, they
