@@ -151,23 +151,45 @@ print(
 # ---------------------------------
 #
 # Interpolating is not free of consequence, and a page that showed only the
-# speed-up would be selling something. Against direct Monte-Carlo at points
-# the table does not contain, the error runs from about 0.003 to 0.015 in
-# reflectance, and it is consistently positive: reflectance is convex in
-# both directions here, so a linear interpolation sits above it. The largest
-# errors are well past the Monte-Carlo noise at this photon count, which
-# means the table spacing is the limit, not the number of photons. Refining
-# the table is the fix; more photons would buy nothing.
+# speed-up would be selling something.
+#
+# Comparing against a single direct Monte-Carlo run would not settle
+# anything, because that run has a one-sigma noise of its own of around
+# 0.006 at this photon count, the same size as the effect being looked for.
+# The reference is therefore averaged over twelve seeds, which divides its
+# noise by about three and makes the remaining difference readable.
 
+REFERENCE_SEEDS = 12
 checks = [(0.4, 0.87), (1.2, 0.93), (2.2, 0.96), (2.7, 0.985)]
-print(f"{'tau':>5} {'ssa':>6} {'table':>8} {'direct':>8} {'error':>8}")
+
+print(f"{'tau':>5} {'ssa':>6} {'table':>8} {'direct':>8} {'noise':>7} {'error':>8}")
 for tau, ssa in checks:
-    direct = mc_reflectance(tau, ssa, g=0.6, mu0=0.5, n_photons=N_PHOTONS, seed=1)
+    draws = np.array(
+        [
+            mc_reflectance(tau, ssa, g=0.6, mu0=0.5, n_photons=N_PHOTONS, seed=seed)[
+                "reflectance"
+            ]
+            for seed in range(REFERENCE_SEEDS)
+        ]
+    )
+    direct = draws.mean()
+    noise = draws.std() / np.sqrt(REFERENCE_SEEDS)
     interpolated = module.forward(tau, ssa)
     print(
-        f"{tau:5.2f} {ssa:6.3f} {interpolated:8.4f} "
-        f"{direct['reflectance']:8.4f} {interpolated - direct['reflectance']:+8.4f}"
+        f"{tau:5.2f} {ssa:6.3f} {interpolated:8.4f} {direct:8.4f} "
+        f"{noise:7.4f} {interpolated - direct:+8.4f}"
     )
+
+# %%
+# Three of the four sit four to five standard errors above the reference,
+# which is what a linear interpolation of a convex function does: the chord
+# lies above the curve. The fourth comes out slightly below, by little more
+# than one standard error, so it is not distinguishable from noise and should
+# not be read as anything.
+#
+# The largest error is in the top corner, where the table is coarsest
+# relative to the curvature. That is a statement about node spacing, so
+# refining the table is the fix and more photons would buy nothing.
 
 # %%
 # The instance travels into worker processes
