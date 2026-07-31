@@ -67,7 +67,7 @@ even then only what that one chunk was still holding.
   be probed reliably, so `force_unlock=True` is the honest override.
 - **No store reindexing.** Extending an axis and resuming is refused rather
   than silently misaligned (edge case 9).
-- **No automatic per-version namespacing.** See [idioms](idioms.md).
+- **No automatic per-version namespacing.** See [idioms](../guide/idioms.md).
 
 ## Batching
 
@@ -83,7 +83,7 @@ even then only what that one chunk was still holding.
 ## Data model
 
 - **Sweep values are primitives**: float, int, str, bool, datetime64. See
-  [idioms](idioms.md) for the label workaround.
+  [idioms](../guide/idioms.md) for the label workaround.
 - **Rectangular axes only.** A wavelength support that depends on the band
   does not fit. The clean workaround is a union grid with zero weights in the
   spectral response.

@@ -133,7 +133,7 @@ On a 3600-pixel map with 25 unique rows, this divides the number of calls
 by 144. With an expensive engine that is nearly the whole story; the
 duplicate positions still need filling in the store, which xsweep does in
 one batched pass rather than one write per pixel (see
-[limitations](limitations.md) for the numbers). `dedup` never changes a
+[limitations](reference/limitations.md) for the numbers). `dedup` never changes a
 value or a shape, only how many times the callee runs to produce them; see
 `scripts/02_pixel_map_dedup.py`.
 
@@ -214,7 +214,7 @@ machinery; reach for the class when `__init__` earns its keep. See
 ## 9. Going further
 
 A few situations are solved with a convention rather than new machinery,
-documented in full in [idioms](idioms.md):
+documented in full in [idioms](guide/idioms.md):
 
 - **Replication / Monte-Carlo repeats**: a bare `rep` dim does not work,
   since a contract loops over variables, not dims; a seed *variable* on
@@ -227,7 +227,7 @@ documented in full in [idioms](idioms.md):
   `__cache_token__()`.
 
 Two more advanced contract features, covered in
-[contract-dsl.md](../specs/001-xsweep-v0/contracts/contract-dsl.md):
+[contract-dsl.md](https://github.com/walcark/xsweep/blob/main/specs/001-xsweep-v0/contracts/contract-dsl.md):
 
 - `const(bias(x, y))` protects specific dims of a context variable from
   ever being sliced, even if a `vec` variable elsewhere shares that dim.
@@ -241,10 +241,10 @@ Two more advanced contract features, covered in
   cases (remote sensing / radiative transfer), each with its equations,
   actual output, and timing tracked across releases. Source and results
   ledger in `benchmarks/`.
-- [Idioms](idioms.md): the recipes above, in full.
-- [Limitations](limitations.md): what xsweep deliberately does not do, and
+- [Idioms](guide/idioms.md): the recipes above, in full.
+- [Limitations](reference/limitations.md): what xsweep deliberately does not do, and
   the measured cost of the store's chunk grid.
-- [Design reference](design/xsweep.md): why it is built this way, and the
+- [Design reference](reference/design.md): why it is built this way, and the
   alternatives that were rejected.
-- [Implementation findings](implementation-findings.md): bugs and
+- [Implementation findings](reference/findings.md): bugs and
   measurements that corrected the design after it was built.
