@@ -7,104 +7,71 @@ same `host`; they say nothing across different machines.
 
 ## Current
 
-| Case | Version | Date | Host | Calls | Wall time (s) |
-|---|---|---|---|---|---|
-| 01_beer_lambert_transmission | 0.3.0 | 2026-07-30 | fedora | 500 | 0.0671 |
-| 02_rayleigh_optical_depth_spectrum | 0.3.0 | 2026-07-30 | fedora | 20 | 0.0536 |
-| 03_pixel_map_dedup_atmospheric_correction | 0.3.0 | 2026-07-30 | fedora | 6 | 0.0514 |
-| 04_band_integration_srf | 0.3.0 | 2026-07-30 | fedora | 80 | 0.2073 |
-| 05_single_scattering_toa_reflectance | 0.3.0 | 2026-07-30 | fedora | 27000 | 2.7931 |
-| 06_henyey_greenstein_phase_function | 0.3.0 | 2026-07-30 | fedora | 48 | 0.0501 |
-| 07_hyperspectral_cube_memory_scaling_dedup | 0.3.0 | 2026-07-30 | fedora | 8 | 0.0632 |
-| 07_hyperspectral_cube_memory_scaling_no_dedup | 0.3.0 | 2026-07-30 | fedora | 6400 | 15.3704 |
-| 08_monte_carlo_seed_ensemble | 0.3.0 | 2026-07-30 | fedora | 300 | 0.0597 |
-| 09_sweepmodule_lut_process_executor | 0.3.0 | 2026-07-30 | fedora | 1600 | 2.6506 |
-| 10_resume_after_interruption_full | 0.3.0 | 2026-07-30 | fedora | 900 | 2.0570 |
-| 10_resume_after_interruption_resume | 0.3.0 | 2026-07-30 | fedora | 90 | 0.2424 |
+| Case | Version | Date | Host | Points | Calls | Wall time (s) | ms/point |
+|---|---|---|---|---|---|---|---|
+| dedup_in_memory | 0.3.0 | 2026-07-31 | fedora.home | 90000 | 60 | 0.2311 | 0.0026 |
+| dedup_to_store | 0.3.0 | 2026-07-31 | fedora.home | 90000 | 60 | 0.2130 | 0.0024 |
+| in_memory_grid | 0.3.0 | 2026-07-31 | fedora.home | 40000 | 40000 | 3.8804 | 0.0970 |
+| resume_first_pass | 0.3.0 | 2026-07-31 | fedora.home | 40000 | 40000 | 3.2104 | 0.0803 |
+| resume_second_pass | 0.3.0 | 2026-07-31 | fedora.home | 40000 | 10000 | 1.0446 | 0.0261 |
+| store_fully_cached | 0.3.0 | 2026-07-31 | fedora.home | 40000 | 0 | 0.0952 | 0.0024 |
+| store_write | 0.3.0 | 2026-07-31 | fedora.home | 40000 | 40000 | 3.9436 | 0.0986 |
+| vec_batched | 0.3.0 | 2026-07-31 | fedora.home | 50 | 5000 | 1.2494 | 24.9889 |
+| vec_whole_axis | 0.3.0 | 2026-07-31 | fedora.home | 50 | 50 | 0.1040 | 2.0808 |
 
 ## History
 
-### 01_beer_lambert_transmission
+### dedup_in_memory
 
-| Version | Date | Host | Calls | Wall time (s) |
-|---|---|---|---|---|
-| 0.3.0 | 2026-07-30 | fedora | 500 | 0.0712 |
-| 0.3.0 | 2026-07-30 | fedora | 500 | 0.0671 |
+| Version | Date | Host | Points | Calls | Wall time (s) |
+|---|---|---|---|---|---|
+| 0.3.0 | 2026-07-31 | fedora.home | 90000 | 60 | 0.2311 |
 
-### 02_rayleigh_optical_depth_spectrum
+### dedup_to_store
 
-| Version | Date | Host | Calls | Wall time (s) |
-|---|---|---|---|---|
-| 0.3.0 | 2026-07-30 | fedora | 20 | 0.0559 |
-| 0.3.0 | 2026-07-30 | fedora | 20 | 0.0536 |
+| Version | Date | Host | Points | Calls | Wall time (s) |
+|---|---|---|---|---|---|
+| 0.3.0 | 2026-07-31 | fedora.home | 90000 | 60 | 0.2130 |
 
-### 03_pixel_map_dedup_atmospheric_correction
+### in_memory_grid
 
-| Version | Date | Host | Calls | Wall time (s) |
-|---|---|---|---|---|
-| 0.3.0 | 2026-07-30 | fedora | 6 | 0.0486 |
-| 0.3.0 | 2026-07-30 | fedora | 6 | 0.0514 |
+| Version | Date | Host | Points | Calls | Wall time (s) |
+|---|---|---|---|---|---|
+| 0.3.0 | 2026-07-31 | fedora.home | 40000 | 40000 | 3.8804 |
 
-### 04_band_integration_srf
+### resume_first_pass
 
-| Version | Date | Host | Calls | Wall time (s) |
-|---|---|---|---|---|
-| 0.3.0 | 2026-07-30 | fedora | 80 | 0.2020 |
-| 0.3.0 | 2026-07-30 | fedora | 80 | 0.2073 |
+| Version | Date | Host | Points | Calls | Wall time (s) |
+|---|---|---|---|---|---|
+| 0.3.0 | 2026-07-31 | fedora.home | 40000 | 40000 | 3.2104 |
 
-### 05_single_scattering_toa_reflectance
+### resume_second_pass
 
-| Version | Date | Host | Calls | Wall time (s) |
-|---|---|---|---|---|
-| 0.3.0 | 2026-07-30 | fedora | 27000 | 2.7407 |
-| 0.3.0 | 2026-07-30 | fedora | 27000 | 2.7931 |
+| Version | Date | Host | Points | Calls | Wall time (s) |
+|---|---|---|---|---|---|
+| 0.3.0 | 2026-07-31 | fedora.home | 40000 | 10000 | 1.0446 |
 
-### 06_henyey_greenstein_phase_function
+### store_fully_cached
 
-| Version | Date | Host | Calls | Wall time (s) |
-|---|---|---|---|---|
-| 0.3.0 | 2026-07-30 | fedora | 48 | 0.0492 |
-| 0.3.0 | 2026-07-30 | fedora | 48 | 0.0501 |
+| Version | Date | Host | Points | Calls | Wall time (s) |
+|---|---|---|---|---|---|
+| 0.3.0 | 2026-07-31 | fedora.home | 40000 | 0 | 0.0952 |
 
-### 07_hyperspectral_cube_memory_scaling_dedup
+### store_write
 
-| Version | Date | Host | Calls | Wall time (s) |
-|---|---|---|---|---|
-| 0.3.0 | 2026-07-30 | fedora | 8 | 0.0754 |
-| 0.3.0 | 2026-07-30 | fedora | 8 | 0.0632 |
+| Version | Date | Host | Points | Calls | Wall time (s) |
+|---|---|---|---|---|---|
+| 0.3.0 | 2026-07-31 | fedora.home | 40000 | 40000 | 3.9436 |
 
-### 07_hyperspectral_cube_memory_scaling_no_dedup
+### vec_batched
 
-| Version | Date | Host | Calls | Wall time (s) |
-|---|---|---|---|---|
-| 0.3.0 | 2026-07-30 | fedora | 6400 | 16.5274 |
-| 0.3.0 | 2026-07-30 | fedora | 6400 | 15.3704 |
+| Version | Date | Host | Points | Calls | Wall time (s) |
+|---|---|---|---|---|---|
+| 0.3.0 | 2026-07-31 | fedora.home | 50 | 5000 | 1.2494 |
 
-### 08_monte_carlo_seed_ensemble
+### vec_whole_axis
 
-| Version | Date | Host | Calls | Wall time (s) |
-|---|---|---|---|---|
-| 0.3.0 | 2026-07-30 | fedora | 300 | 0.0626 |
-| 0.3.0 | 2026-07-30 | fedora | 300 | 0.0597 |
-
-### 09_sweepmodule_lut_process_executor
-
-| Version | Date | Host | Calls | Wall time (s) |
-|---|---|---|---|---|
-| 0.3.0 | 2026-07-30 | fedora | 1600 | 2.5467 |
-| 0.3.0 | 2026-07-30 | fedora | 1600 | 2.6506 |
-
-### 10_resume_after_interruption_full
-
-| Version | Date | Host | Calls | Wall time (s) |
-|---|---|---|---|---|
-| 0.3.0 | 2026-07-30 | fedora | 900 | 2.0766 |
-| 0.3.0 | 2026-07-30 | fedora | 900 | 2.0570 |
-
-### 10_resume_after_interruption_resume
-
-| Version | Date | Host | Calls | Wall time (s) |
-|---|---|---|---|---|
-| 0.3.0 | 2026-07-30 | fedora | 90 | 0.2382 |
-| 0.3.0 | 2026-07-30 | fedora | 90 | 0.2424 |
+| Version | Date | Host | Points | Calls | Wall time (s) |
+|---|---|---|---|---|---|
+| 0.3.0 | 2026-07-31 | fedora.home | 50 | 50 | 0.1040 |
 

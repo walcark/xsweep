@@ -1,229 +1,118 @@
 [
   {
-    "case": "01_beer_lambert_transmission",
+    "case": "dedup_in_memory",
     "points": [
       {
         "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 500,
-        "wall_time_s": 0.071191
-      },
-      {
-        "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 500,
-        "wall_time_s": 0.06709
+        "date": "2026-07-31",
+        "host": "fedora.home",
+        "n_points": 90000,
+        "n_calls": 60,
+        "wall_time_s": 0.231114
       }
     ]
   },
   {
-    "case": "02_rayleigh_optical_depth_spectrum",
+    "case": "dedup_to_store",
     "points": [
       {
         "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 20,
-        "wall_time_s": 0.055882
-      },
-      {
-        "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 20,
-        "wall_time_s": 0.053596
+        "date": "2026-07-31",
+        "host": "fedora.home",
+        "n_points": 90000,
+        "n_calls": 60,
+        "wall_time_s": 0.212964
       }
     ]
   },
   {
-    "case": "03_pixel_map_dedup_atmospheric_correction",
+    "case": "in_memory_grid",
     "points": [
       {
         "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 6,
-        "wall_time_s": 0.04859
-      },
-      {
-        "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 6,
-        "wall_time_s": 0.051433
+        "date": "2026-07-31",
+        "host": "fedora.home",
+        "n_points": 40000,
+        "n_calls": 40000,
+        "wall_time_s": 3.880407
       }
     ]
   },
   {
-    "case": "04_band_integration_srf",
+    "case": "resume_first_pass",
     "points": [
       {
         "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 80,
-        "wall_time_s": 0.201977
-      },
-      {
-        "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 80,
-        "wall_time_s": 0.207303
+        "date": "2026-07-31",
+        "host": "fedora.home",
+        "n_points": 40000,
+        "n_calls": 40000,
+        "wall_time_s": 3.210407
       }
     ]
   },
   {
-    "case": "05_single_scattering_toa_reflectance",
+    "case": "resume_second_pass",
     "points": [
       {
         "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 27000,
-        "wall_time_s": 2.740674
-      },
-      {
-        "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 27000,
-        "wall_time_s": 2.793105
+        "date": "2026-07-31",
+        "host": "fedora.home",
+        "n_points": 40000,
+        "n_calls": 10000,
+        "wall_time_s": 1.044585
       }
     ]
   },
   {
-    "case": "06_henyey_greenstein_phase_function",
+    "case": "store_fully_cached",
     "points": [
       {
         "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 48,
-        "wall_time_s": 0.049171
-      },
-      {
-        "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 48,
-        "wall_time_s": 0.050066
+        "date": "2026-07-31",
+        "host": "fedora.home",
+        "n_points": 40000,
+        "n_calls": 0,
+        "wall_time_s": 0.095157
       }
     ]
   },
   {
-    "case": "07_hyperspectral_cube_memory_scaling_dedup",
+    "case": "store_write",
     "points": [
       {
         "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 8,
-        "wall_time_s": 0.075442
-      },
-      {
-        "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 8,
-        "wall_time_s": 0.063173
+        "date": "2026-07-31",
+        "host": "fedora.home",
+        "n_points": 40000,
+        "n_calls": 40000,
+        "wall_time_s": 3.943574
       }
     ]
   },
   {
-    "case": "07_hyperspectral_cube_memory_scaling_no_dedup",
+    "case": "vec_batched",
     "points": [
       {
         "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 6400,
-        "wall_time_s": 16.527395
-      },
-      {
-        "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 6400,
-        "wall_time_s": 15.370403
+        "date": "2026-07-31",
+        "host": "fedora.home",
+        "n_points": 50,
+        "n_calls": 5000,
+        "wall_time_s": 1.249443
       }
     ]
   },
   {
-    "case": "08_monte_carlo_seed_ensemble",
+    "case": "vec_whole_axis",
     "points": [
       {
         "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 300,
-        "wall_time_s": 0.062614
-      },
-      {
-        "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 300,
-        "wall_time_s": 0.059747
-      }
-    ]
-  },
-  {
-    "case": "09_sweepmodule_lut_process_executor",
-    "points": [
-      {
-        "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 1600,
-        "wall_time_s": 2.546708
-      },
-      {
-        "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 1600,
-        "wall_time_s": 2.650552
-      }
-    ]
-  },
-  {
-    "case": "10_resume_after_interruption_full",
-    "points": [
-      {
-        "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 900,
-        "wall_time_s": 2.07661
-      },
-      {
-        "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 900,
-        "wall_time_s": 2.056979
-      }
-    ]
-  },
-  {
-    "case": "10_resume_after_interruption_resume",
-    "points": [
-      {
-        "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 90,
-        "wall_time_s": 0.238189
-      },
-      {
-        "version": "0.3.0",
-        "date": "2026-07-30",
-        "host": "fedora",
-        "n_calls": 90,
-        "wall_time_s": 0.242382
+        "date": "2026-07-31",
+        "host": "fedora.home",
+        "n_points": 50,
+        "n_calls": 50,
+        "wall_time_s": 0.104042
       }
     ]
   }

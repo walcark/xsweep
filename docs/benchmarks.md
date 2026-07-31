@@ -1,20 +1,22 @@
 # Benchmark evolution across versions
 
-The gallery examples on this site are kept small and fast, because the site
-re-runs every one of them on every build. Timing them would say more about
-the runner than about xsweep.
+The examples in the gallery use an engine that is expensive on purpose,
+because that is the situation xsweep is for. These measurements want the
+opposite: **a callee as close to free as Python allows, over as many points
+as is practical**, so that what gets timed is xsweep's own bookkeeping rather
+than somebody's physics. If the engine dominated, the number would tell you
+about the engine.
 
-The measurements below come from a separate, deliberately heavier set of
-cases under `benchmarks/`, frozen so that the same work is timed release
-after release. They are recorded only when
-[`pixi run -e dev bench`](https://github.com/walcark/xsweep/blob/main/benchmarks/README.md)
-is run on purpose, appended to `benchmarks/results/history.jsonl`, and also
-rendered as a plain table in
+The cases are frozen, so the same work is timed release after release. They
+run only on a deliberate
+[`pixi run -e dev bench`](https://github.com/walcark/xsweep/blob/main/benchmarks/README.md),
+never on a docs build, and are also rendered as a plain table in
 [TIMING.md](https://github.com/walcark/xsweep/blob/main/benchmarks/results/TIMING.md).
 
-Pick a case to see how its wall-clock time has moved across versions. Times
-are only comparable within one host, shown on hover; they say nothing across
-different machines.
+The chart plots **cost per point**, which survives a case being resized in a
+way that raw wall time does not. Both are on the hover line, along with the
+host: times are only comparable against other runs on the same machine, and
+say nothing across different hardware.
 
 ```{raw} html
 <div id="benchmarks-chart">

@@ -1,4 +1,4 @@
-// Renders the per-case wall-time-vs-version chart on the benchmarks page.
+// Renders the per-case cost-vs-version chart on the benchmarks page.
 // Vanilla JS, no dependency: the dataset is small (few points per case) and
 // this repo has no other JS tooling, so a small hand-rolled canvas chart is
 // simpler than adding a charting library.
@@ -24,8 +24,12 @@
     const height = canvas.height;
     ctx.clearRect(0, 0, width, height);
 
-    const style = getComputedStyle(document.documentElement);
-    const isDark = style.colorScheme === "dark" || document.documentElement.dataset.theme === "dark";
+    // Shibuya stamps "auto" | "light" | "dark" on the root element, and
+    // resolves "auto" against the OS preference.
+    const mode = document.documentElement.getAttribute("data-color-mode") || "auto";
+    const prefersDark =
+      window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const isDark = mode === "dark" || (mode === "auto" && prefersDark);
     const fg = isDark ? "#e6e6e6" : "#1a1a1a";
     const grid = isDark ? "#3a3a3a" : "#dddddd";
     const accent = isDark ? "#6ab0f3" : "#2166ac";
@@ -35,15 +39,17 @@
     const plotTop = PADDING.top;
     const plotBottom = height - PADDING.bottom;
 
-    const times = points.map((p) => p.wall_time_s);
-    const yMax = Math.max(...times) * 1.15 || 1;
+    // Per-point cost rather than wall time: it stays comparable when a
+    // case is resized, which raw wall time does not.
+    const cost = (p) => (p.wall_time_s / p.n_points) * 1000;
+    const yMax = Math.max(...points.map(cost)) * 1.15 || 1;
     const yMin = 0;
 
     function xForIndex(i) {
       if (points.length === 1) return (plotLeft + plotRight) / 2;
       return plotLeft + (i / (points.length - 1)) * (plotRight - plotLeft);
     }
-    function yForTime(t) {
+    function yForCost(t) {
       return plotBottom - ((t - yMin) / (yMax - yMin)) * (plotBottom - plotTop);
     }
 
@@ -64,13 +70,13 @@
     const yTicks = 4;
     for (let i = 0; i <= yTicks; i++) {
       const t = (yMax / yTicks) * i;
-      const y = yForTime(t);
+      const y = yForCost(t);
       ctx.strokeStyle = grid;
       ctx.beginPath();
       ctx.moveTo(plotLeft, y);
       ctx.lineTo(plotRight, y);
       ctx.stroke();
-      ctx.fillText(t.toFixed(3) + "s", plotLeft - 8, y);
+      ctx.fillText(t.toFixed(3) + " ms", plotLeft - 8, y);
     }
 
     // Line connecting points.
@@ -79,7 +85,7 @@
     ctx.beginPath();
     points.forEach((p, i) => {
       const x = xForIndex(i);
-      const y = yForTime(p.wall_time_s);
+      const y = yForCost(cost(p));
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     });
@@ -90,7 +96,7 @@
     ctx.textBaseline = "top";
     points.forEach((p, i) => {
       const x = xForIndex(i);
-      const y = yForTime(p.wall_time_s);
+      const y = yForCost(cost(p));
       ctx.fillStyle = accent;
       ctx.beginPath();
       ctx.arc(x, y, POINT_RADIUS, 0, 2 * Math.PI);
@@ -112,16 +118,17 @@
           nearest = i;
         }
       });
-      const p = points[nearest];
-      infoEl.textContent =
-        `version ${p.version} · ${p.date} · host ${p.host} · ` +
-        `${p.n_calls} calls · ${p.wall_time_s.toFixed(4)}s`;
+      describe(points[nearest]);
     };
     if (points.length > 0) {
-      const last = points[points.length - 1];
+      describe(points[points.length - 1]);
+    }
+
+    function describe(p) {
       infoEl.textContent =
-        `version ${last.version} · ${last.date} · host ${last.host} · ` +
-        `${last.n_calls} calls · ${last.wall_time_s.toFixed(4)}s`;
+        `version ${p.version} · ${p.date} · host ${p.host} · ` +
+        `${p.n_points} points · ${p.n_calls} calls · ` +
+        `${p.wall_time_s.toFixed(4)}s total · ${cost(p).toFixed(4)} ms/point`;
     }
   }
 

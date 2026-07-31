@@ -1,12 +1,12 @@
-"""Run every benchmark example and regenerate the results reports.
+"""Run every benchmark case and regenerate the results reports.
 
 Run with::
 
     pixi run -e dev bench
 
-Executes each `examples/NN_*.py` script (which appends its own measurement to
+Executes each `cases/NN_*.py` script (which appends its own measurements to
 `results/history.jsonl`), then rebuilds `results/TIMING.md` and
-`docs/site/_static/benchmarks_history.json` from that ledger.
+`docs/_static/benchmarks_history.json` from that ledger.
 """
 
 from __future__ import annotations
@@ -19,15 +19,15 @@ from pathlib import Path
 from typing import Any
 
 _ROOT = Path(__file__).resolve().parent
-_EXAMPLES_DIR = _ROOT / "examples"
+_CASES_DIR = _ROOT / "cases"
 _HISTORY_PATH = _ROOT / "results" / "history.jsonl"
 _TIMING_PATH = _ROOT / "results" / "TIMING.md"
-_SITE_JSON_PATH = _ROOT.parent / "docs" / "site" / "_static" / "benchmarks_history.json"
+_SITE_JSON_PATH = _ROOT.parent / "docs" / "_static" / "benchmarks_history.json"
 
 
-def _run_examples() -> None:
-    for script in sorted(_EXAMPLES_DIR.glob("[0-9]*.py")):
-        print(f"=== {script.name} ===")
+def _run_cases() -> None:
+    for script in sorted(_CASES_DIR.glob("[0-9]*.py")):
+        print(f"=== {script.name} ===", flush=True)
         subprocess.run([sys.executable, str(script)], check=True)
 
 
@@ -60,26 +60,28 @@ def _write_timing_md(rows: list[dict[str, Any]]) -> None:
         "",
         "## Current",
         "",
-        "| Case | Version | Date | Host | Calls | Wall time (s) |",
-        "|---|---|---|---|---|---|",
+        "| Case | Version | Date | Host | Points | Calls | Wall time (s) | ms/point |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for case in sorted(grouped):
         latest = grouped[case][-1]
         lines.append(
             f"| {case} | {latest['xsweep_version']} | {latest['date']} | "
-            f"{latest['host']} | {latest['n_calls']} | "
-            f"{latest['wall_time_s']:.4f} |"
+            f"{latest['host']} | {latest['n_points']} | {latest['n_calls']} | "
+            f"{latest['wall_time_s']:.4f} | "
+            f"{latest['wall_time_s'] / latest['n_points'] * 1e3:.4f} |"
         )
     lines += ["", "## History", ""]
     for case in sorted(grouped):
         lines.append(f"### {case}")
         lines.append("")
-        lines.append("| Version | Date | Host | Calls | Wall time (s) |")
-        lines.append("|---|---|---|---|---|")
+        lines.append("| Version | Date | Host | Points | Calls | Wall time (s) |")
+        lines.append("|---|---|---|---|---|---|")
         for row in grouped[case]:
             lines.append(
                 f"| {row['xsweep_version']} | {row['date']} | {row['host']} | "
-                f"{row['n_calls']} | {row['wall_time_s']:.4f} |"
+                f"{row['n_points']} | {row['n_calls']} | "
+                f"{row['wall_time_s']:.4f} |"
             )
         lines.append("")
     _TIMING_PATH.write_text("\n".join(lines) + "\n")
@@ -95,6 +97,7 @@ def _write_site_json(rows: list[dict[str, Any]]) -> None:
                     "version": row["xsweep_version"],
                     "date": row["date"],
                     "host": row["host"],
+                    "n_points": row["n_points"],
                     "n_calls": row["n_calls"],
                     "wall_time_s": row["wall_time_s"],
                 }
@@ -109,7 +112,7 @@ def _write_site_json(rows: list[dict[str, Any]]) -> None:
 
 def main() -> None:
     """Run every case, then rebuild TIMING.md and the site's history JSON."""
-    _run_examples()
+    _run_cases()
     rows = _load_history()
     _write_timing_md(rows)
     _write_site_json(rows)

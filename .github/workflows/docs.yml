@@ -22,11 +22,9 @@ jobs:
         with:
           environments: docs
       - name: Build the documentation site
-        # Sphinx-gallery re-executes every example to render its output; this
-        # keeps that run from appending to the committed benchmark ledger
-        # under an ephemeral runner hostname (see benchmarks/_lib/timing.py).
-        env:
-          XSWEEP_BENCH_SKIP_RECORD: "1"
+        # Sphinx-gallery re-executes every example to render its output. The
+        # gallery records no timings, so this cannot touch the benchmark
+        # ledger; that only grows from a deliberate `pixi run -e dev bench`.
         run: pixi run -e docs docs-build
       - uses: actions/configure-pages@v6.0.0
       - uses: actions/upload-pages-artifact@v5.0.0
