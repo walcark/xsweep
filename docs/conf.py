@@ -43,7 +43,7 @@ sphinx_gallery_conf = {
     "examples_dirs": "../examples",
     "gallery_dirs": "auto_examples",
     "filename_pattern": r"/\d+_",
-    "ignore_pattern": r"/_[^/]*\.py$",
+    "ignore_pattern": r"_solvers\.py",
     "within_subsection_order": "FileNameSortKey",
     "download_all_examples": False,
     "remove_config_comments": True,

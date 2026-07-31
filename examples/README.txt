@@ -1,11 +1,19 @@
 Examples
 ========
 
-Each example is a self-contained script, runnable on its own
-(``pixi run -e dev python benchmarks/examples/NN_name.py``) and rendered
-below with its full output. Sizes and memory profiles vary on purpose, from
-a few hundred in-memory calls to a persisted, deduplicated pixel map.
+Read these in order. Each page adds exactly one idea to the one before it,
+and they all drive the same engine: a small Monte-Carlo photon transport
+solver, plus a two-stream doubling solver for the spectral pages. Both live
+in ``_solvers.py`` next to these scripts, and both are deliberately hard to
+vectorise, because a sweep library has nothing to offer a closed form.
 
-Where an example implements a published formula, its docstring cites the
-source. Anything synthetic (a spectral response function, a lookup table) is
-labelled as such, not presented as instrument data.
+Every script is runnable on its own::
+
+    pixi run -e dev python examples/01_why_a_sweep_library.py
+
+The physics is textbook and its sources are cited in ``_solvers.py``; the
+limits that have to hold are asserted in
+``tests/integration/test_example_solvers.py``. Nothing here is calibrated
+against a real instrument, and the photon counts are kept small so that this
+site can be built in a couple of minutes. A production engine costs seconds
+to minutes per point, which is the regime these pages are really about.
