@@ -35,7 +35,7 @@ def _sweeper(counter: list[float], spec: str = "loop(a, b) -> out()"):
 @pytest.mark.parametrize(
     ("spec", "fragment"),
     [
-        ("batch(wl) -> t(wl)", "unknown clause"),
+        ("sample(wl) -> t(wl)", "unknown clause"),
         ("loop(a)", "no '->' clause"),
         ("vec(a) const(a) -> out()", "appears in both"),
         ("loop(a) -> out(), out()", "declared twice"),

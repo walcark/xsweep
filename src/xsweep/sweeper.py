@@ -22,8 +22,13 @@ import xarray as xr
 from . import policy as policy_mod
 from .contract import Contract, coerce
 from .dedup import unique_map
-from .delivery import assemble_args, normalise_return
-from .errors import PointFailed, PolicyError
+from .delivery import (
+    assemble_args,
+    assemble_group_args,
+    normalise_return,
+    split_group_return,
+)
+from .errors import ContractError, PointFailed, PolicyError
 from .executors import build_executor
 from .lock import StoreLock
 from .plan import Plan, WorkItem, build_plan
@@ -294,13 +299,16 @@ def _run(plan: Plan, target: Sweeper) -> xr.Dataset:
     runnable = [item for item in plan.work_items if item.runnable]
 
     sizes: dict[str, int] = {}
-    probe: Outcome | None = None
+    probe: list[Outcome] | None = None
     if not plan.determined and runnable:
         # The store cannot be allocated before the output shape is known, and
         # the callee costs minutes, so the probe result is kept, not discarded.
-        probe = _call(plan, target, runnable[0])
-        if probe.data is not None:
-            sizes.update({str(d): int(n) for d, n in probe.data.sizes.items()})
+        # A batched contract is probed with a whole group, and the sizes are
+        # read after the split, so the group dim never reaches the store.
+        probe = _call_group(plan, target, _groups(plan, runnable)[0])
+        first = probe[0].data
+        if first is not None:
+            sizes.update({str(d): int(n) for d, n in first.sizes.items()})
 
     store = Store.open_or_create(plan, sizes=sizes)
     if plan.policy.store is None:
@@ -361,7 +369,7 @@ def _stream(
     plan: Plan,
     target: Sweeper,
     runnable: list[WorkItem],
-    probe: Outcome | None,
+    probe: list[Outcome] | None,
 ) -> Iterator[Outcome]:
     """Dispatch the runnable items, reusing the probe result if there was one.
 
@@ -369,18 +377,83 @@ def _stream(
     `_run` write (or buffer) it immediately, so a later item's failure can
     never discard an earlier item's already-computed result.
     """
+    groups = _groups(plan, runnable)
     if probe is not None:
-        yield probe
-        rest = runnable[1:]
+        yield from probe
+        rest = groups[1:]
     else:
-        rest = runnable
+        rest = groups
 
     executor = build_executor(plan.policy.executor, max_workers=plan.policy.max_workers)
     # A partial rather than a closure: a lambda cannot be pickled, so the
     # process executor would reject every sweep before running a single one.
-    call = functools.partial(_call, plan, target)
-    for _, outcome in executor.map_unordered(call, rest):
-        yield outcome
+    call = functools.partial(_call_group, plan, target)
+    for _, outcomes in executor.map_unordered(call, rest):
+        yield from outcomes
+
+
+def _groups(plan: Plan, items: list[WorkItem]) -> list[list[WorkItem]]:
+    """Cut the runnable items into the groups one batched call receives.
+
+    Items are grouped only among those sharing the same vec batch slices:
+    one call carries one vec batch, so points wanting different slices
+    cannot travel together.  Ungrouped contracts yield one item per group,
+    which keeps the execution path identical for both.
+    """
+    if not plan.contract.is_batched:
+        return [[item] for item in items]
+
+    size = max(1, plan.policy.batch_size)
+    by_slices: dict[tuple[tuple[str, int, int], ...], list[WorkItem]] = {}
+    for item in items:
+        key = tuple(sorted((d, sl.start, sl.stop) for d, sl in item.slices.items()))
+        by_slices.setdefault(key, []).append(item)
+
+    groups: list[list[WorkItem]] = []
+    for bucket in by_slices.values():
+        groups += [bucket[i : i + size] for i in range(0, len(bucket), size)]
+    return groups
+
+
+def _call_group(plan: Plan, target: Sweeper, group: list[WorkItem]) -> list[Outcome]:
+    """Invoke the wrapped function once for a whole group of points.
+
+    Returns one :class:`Outcome` per point, so everything downstream —
+    the write buffers, status, dedup expansion — never learns that the
+    points travelled together.  A failure is attributed to the whole
+    group: the callee produced nothing, and guessing which point caused
+    it would be a policy of its own.
+    """
+    if not plan.contract.is_batched:
+        return [_call(plan, target, group[0])]
+
+    args = assemble_group_args(
+        plan.contract,
+        group_values=[plan.grid.values_at(item.point_index) for item in group],
+        arrays=_arrays_for(plan, group[0]),
+        statics=plan.statics,
+    )
+    attempts = plan.policy.retries + 1
+    last: BaseException | None = None
+    for _ in range(attempts):
+        try:
+            data = normalise_return(target.func(**args), plan.contract)
+        except ContractError:
+            # The callable does not honour its own contract. Retrying would
+            # fail identically and recording nan would hide the bug, so this
+            # one propagates whatever the error policy says.
+            raise
+        except Exception as exc:  # noqa: BLE001 - policy decides what happens
+            last = exc
+            continue
+        parts = split_group_return(data, len(group))
+        return [Outcome(item, part) for item, part in zip(group, parts, strict=True)]
+    if plan.policy.on_error == "raise":
+        raise PointFailed(
+            f"batched call failed over {len(group)} point(s) starting at "
+            f"{group[0].point_index} after {attempts} attempt(s): {last}"
+        ) from last
+    return [Outcome(item, None, last) for item in group]
 
 
 def _call(plan: Plan, target: Sweeper, item: WorkItem) -> Outcome:

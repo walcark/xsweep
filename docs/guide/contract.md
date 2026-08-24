@@ -7,6 +7,7 @@ satellite scene.
 
 ```
 loop(tau, ssa)       one value per call, as a native Python scalar
+batch(tau, ssa)      several values per call, as a 1-D array
 vec(wl @ 8)          a whole axis, or batches of at most 8
 const(srf)           context data, handed whole to every call
 -> reflectance(wl)   named outputs, with the dims one call produces
@@ -59,6 +60,57 @@ legal when the output still carries that dim. A callee that reduces over the
 axis, or that needs its neighbours (a convolution, a moving average), is not
 safe to run on pieces of it, and the contract refuses the marker in that
 case, at decoration time.
+
+## batch
+
+Same semantics as `loop`, different delivery. The variables stay sweep
+axes — they build the space, feed `dedup`, chunk the store and carry
+status — but a call receives several points at once instead of one:
+
+```python
+@sweep("batch(aot, rh) vec(wl) -> tdir(wl)")
+def transmittance(aot: xr.DataArray, rh: xr.DataArray, wl: xr.DataArray):
+    return engine(aot.values, rh.values, wl.values)  # one call, many states
+```
+
+Each batched variable arrives as a 1-D `xr.DataArray` over a dim named
+`point`, aligned across variables: position `i` of every batched argument
+describes the same point. The callable returns its outputs stacked along
+that same `point` dim, and xsweep cuts them back apart.
+
+Use it for an engine that is expensive per call *and* takes many
+parameter sets at once, which is the shape of most batched solvers: a
+fixed setup — building a profile, moving data to a GPU, loading a model —
+that only amortises across the batch. `vec` gives the same grouping but
+its axes are not sweep axes, so there is nothing for `dedup` to collapse
+and an interruption discards the whole run; `loop` keeps both but calls
+the engine once per point, paying the setup every time.
+
+How many points a call receives is a run-time decision, so it lives in
+the policy rather than the contract:
+
+```python
+SweepPolicy(batch_size=64)
+```
+
+One number, not one per dim: a group carries whole points, which span the
+product of every loop dim rather than positions along one of them.
+
+The output clause is unchanged, and that is the point:
+
+```
+loop(aot, rh)  vec(wl) -> tdir(wl)     # one state per call
+batch(aot, rh) vec(wl) -> tdir(wl)     # 64 states per call
+```
+
+`tdir(wl)` says what **one state** produces. Switching delivery never
+rewrites it, which is what makes batching a cost decision and nothing
+more. A callable that forgets to stack its results is told so rather than
+recorded as a failed point: it does not honour the contract, and retrying
+it would fail identically.
+
+Mixing the two clauses is allowed. A `loop` variable stays scalar and is
+shared by the whole group, so xsweep only groups points that agree on it.
 
 ## const
 

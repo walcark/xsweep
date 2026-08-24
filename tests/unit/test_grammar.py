@@ -78,7 +78,7 @@ def test_contract_is_hashable() -> None:
 @pytest.mark.parametrize(
     ("spec", "fragment"),
     [
-        ("batch(wl @ 8) -> t(wl)", "unknown clause 'batch'"),
+        ("sample(wl @ 8) -> t(wl)", "unknown clause 'sample'"),
         ("loop(a)", "no '->' clause"),
         ("vec(a) vec(b) -> t()", "clause 'vec' appears twice"),
         ("loop(a) -> t(", "expected a dim name"),
@@ -97,4 +97,42 @@ def test_parse_errors(spec: str, fragment: str) -> None:
 def test_parse_error_carries_offset() -> None:
     """Errors point at the character that caused them."""
     with pytest.raises(ContractError, match="offset 0"):
-        Contract.parse("batch(wl) -> t(wl)")
+        Contract.parse("sample(wl) -> t(wl)")
+
+
+# --- batch clause ---
+
+
+def test_batch_clause_produces_batched_loop_vars() -> None:
+    """A batch variable is a loop variable with a different delivery."""
+    contract = Contract.parse("batch(aot, rh) vec(wl) -> t(wl)")
+
+    assert contract.loop == (
+        LoopVar("aot", deliver="batch"),
+        LoopVar("rh", deliver="batch"),
+    )
+    assert contract.batched == contract.loop
+    assert contract.is_batched
+
+
+def test_loop_and_batch_coexist() -> None:
+    """A contract may deliver some points scalar and others in groups."""
+    contract = Contract.parse("loop(sza) batch(aot) -> t()")
+
+    assert contract.loop == (LoopVar("sza"), LoopVar("aot", deliver="batch"))
+    assert contract.inputs == ("sza", "aot")
+
+
+def test_batch_survives_a_render_round_trip() -> None:
+    """The canonical form keeps the two clauses apart."""
+    spec = "loop(sza) batch(aot, rh) vec(wl @ 8) -> t(wl)"
+
+    assert Contract.parse(spec).render() == spec
+
+
+def test_a_plain_contract_is_not_batched() -> None:
+    """is_batched stays False when no batch clause is declared."""
+    contract = Contract.parse("loop(aot) -> t()")
+
+    assert contract.batched == ()
+    assert not contract.is_batched

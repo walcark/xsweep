@@ -66,6 +66,11 @@ class SweepPolicy:
         memory-budget sizing. Affects write cost only, never results: a
         wider chunk means fewer, larger writes, at the price of buffering
         more computed points in memory before they are flushed.
+    batch_size
+        How many points a ``batch``-delivered call receives at once. One
+        number rather than one per dim: a batched call carries whole points,
+        which span the product of every loop dim, not positions along one of
+        them. Ignored by a contract that declares no ``batch`` clause.
     dedup
         ``True`` deduplicates over every loop dim, a tuple over the named ones.
     executor
@@ -90,6 +95,7 @@ class SweepPolicy:
     store: str | Path | None | _Unset = UNSET
     chunks: Mapping[str, int | Literal["auto"]] | _Unset = UNSET
     store_chunks: Mapping[str, int] | _Unset = UNSET
+    batch_size: int | _Unset = UNSET
     dedup: bool | tuple[str, ...] | _Unset = UNSET
     executor: str | Any | _Unset = UNSET
     max_workers: int | None | _Unset = UNSET
@@ -107,6 +113,7 @@ class ResolvedPolicy:
     store: str | Path | None = None
     chunks: Mapping[str, int | Literal["auto"]] = field(default_factory=dict)
     store_chunks: Mapping[str, int] = field(default_factory=dict)
+    batch_size: int = 64
     dedup: bool | tuple[str, ...] = False
     executor: str | Any = "serial"
     max_workers: int | None = None

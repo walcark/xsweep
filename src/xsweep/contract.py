@@ -23,7 +23,7 @@ from .errors import ContractError
 
 __all__ = ["Contract", "ConstVar", "LoopVar", "OutVar", "VecVar"]
 
-_CLAUSES = ("loop", "vec", "const")
+_CLAUSES = ("loop", "batch", "vec", "const")
 _TOKEN_RE = re.compile(
     r"""
     (?P<arrow>->)
@@ -59,11 +59,16 @@ class LoopVar:
         Variable name in the space.
     deliver
         ``"scalar"`` hands the callable a native Python scalar, which is what
-        external engines want; ``"array"`` keeps a 0-d DataArray.
+        external engines want; ``"array"`` keeps a 0-d DataArray; ``"batch"``
+        hands several points at once, as a 1-D array over the group.
+
+        ``"batch"`` changes only the delivery. The variable stays a sweep
+        axis, so the space, deduplication, the store and resumption treat it
+        exactly as a scalar-delivered loop variable.
     """
 
     name: str
-    deliver: Literal["scalar", "array"] = "scalar"
+    deliver: Literal["scalar", "array", "batch"] = "scalar"
 
 
 @dataclass(frozen=True)
@@ -131,7 +136,9 @@ class Contract:
     Parameters
     ----------
     loop
-        Variables consumed one value per call.
+        Variables consumed one value per call, whatever their delivery: a
+        ``batch``-delivered variable lives here too, since batching changes
+        how a point reaches the callable and not what a point is.
     vec
         Variables consumed as vectors, possibly in batches.
     const
@@ -152,6 +159,16 @@ class Contract:
     const: tuple[ConstVar, ...] = ()
     out: tuple[OutVar, ...] = ()
     version: str = "0"
+
+    @property
+    def batched(self) -> tuple[LoopVar, ...]:
+        """Return the loop variables delivered a group at a time."""
+        return tuple(v for v in self.loop if v.deliver == "batch")
+
+    @property
+    def is_batched(self) -> bool:
+        """Return True when any loop variable is delivered in groups."""
+        return bool(self.batched)
 
     @property
     def inputs(self) -> tuple[str, ...]:
@@ -204,8 +221,11 @@ class Contract:
     def render(self) -> str:
         """Return the canonical string form, used in reports and fingerprints."""
         parts: list[str] = []
-        if self.loop:
-            parts.append(f"loop({', '.join(v.name for v in self.loop)})")
+        plain = [v.name for v in self.loop if v.deliver != "batch"]
+        if plain:
+            parts.append(f"loop({', '.join(plain)})")
+        if self.batched:
+            parts.append(f"batch({', '.join(v.name for v in self.batched)})")
         if self.vec:
             items = [
                 v.name if v.max_batch is None else f"{v.name} @ {v.max_batch}"
@@ -305,7 +325,9 @@ class _Parser:
         self._expect("arrow", "'->'")
         out = self._outputs()
 
-        loop = tuple(LoopVar(str(n)) for n in clauses.get("loop", ()))
+        loop = tuple(LoopVar(str(n)) for n in clauses.get("loop", ())) + tuple(
+            LoopVar(str(n), deliver="batch") for n in clauses.get("batch", ())
+        )
         vec = tuple(v for v in clauses.get("vec", ()) if isinstance(v, VecVar))
         const = tuple(v for v in clauses.get("const", ()) if isinstance(v, ConstVar))
         return Contract(loop=loop, vec=vec, const=const, out=out, version=version)

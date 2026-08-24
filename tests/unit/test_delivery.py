@@ -7,7 +7,13 @@ import pytest
 import xarray as xr
 
 from xsweep.contract import Contract, LoopVar, OutVar
-from xsweep.delivery import assemble_args, normalise_return
+from xsweep.delivery import (
+    GROUP_DIM,
+    assemble_args,
+    assemble_group_args,
+    normalise_return,
+    split_group_return,
+)
 from xsweep.errors import ContractError
 
 
@@ -118,3 +124,63 @@ def test_return_shape_mismatches(result: object, spec: str, fragment: str) -> No
     """Mismatches between declaration and return are named precisely."""
     with pytest.raises(ContractError, match=fragment):
         normalise_return(result, Contract.parse(spec))
+
+
+# --- batched delivery ---
+
+
+def test_group_args_stack_batched_variables() -> None:
+    """Batched variables arrive as one aligned array over the group dim."""
+    contract = Contract.parse("batch(aot, rh) -> t()")
+
+    args = assemble_group_args(
+        contract,
+        group_values=[{"aot": 0.1, "rh": 50.0}, {"aot": 0.4, "rh": 80.0}],
+        arrays={},
+        statics={},
+    )
+
+    assert args["aot"].dims == (GROUP_DIM,)
+    np.testing.assert_allclose(args["aot"].values, [0.1, 0.4])
+    np.testing.assert_allclose(args["rh"].values, [50.0, 80.0])
+
+
+def test_group_args_keep_a_scalar_loop_variable_scalar() -> None:
+    """A loop variable shared by the group is not stacked."""
+    contract = Contract.parse("loop(sza) batch(aot) -> t()")
+
+    args = assemble_group_args(
+        contract,
+        group_values=[{"sza": 40.0, "aot": 0.1}, {"sza": 40.0, "aot": 0.4}],
+        arrays={},
+        statics={},
+    )
+
+    assert args["sza"] == 40.0
+    assert args["aot"].sizes[GROUP_DIM] == 2
+
+
+def test_a_scalar_loop_variable_may_not_vary_within_a_group() -> None:
+    """Grouping points that disagree on a scalar variable is ambiguous."""
+    contract = Contract.parse("loop(sza) batch(aot) -> t()")
+
+    with pytest.raises(ContractError, match="takes 2 values"):
+        assemble_group_args(
+            contract,
+            group_values=[{"sza": 40.0, "aot": 0.1}, {"sza": 60.0, "aot": 0.4}],
+            arrays={},
+            statics={},
+        )
+
+
+def test_split_drops_the_group_dim() -> None:
+    """Each point's Dataset looks exactly like an unbatched return."""
+    result = xr.Dataset(
+        {"t": xr.DataArray([[1.0, 2.0], [3.0, 4.0]], dims=[GROUP_DIM, "wl"])}
+    )
+
+    parts = split_group_return(result, 2)
+
+    assert len(parts) == 2
+    assert parts[0]["t"].dims == ("wl",)
+    np.testing.assert_allclose(parts[1]["t"].values, [3.0, 4.0])
