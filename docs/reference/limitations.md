@@ -10,7 +10,9 @@ The persistent mode is calibrated for callees costing seconds to minutes,
 where engine time dominates by construction. Fast callees are NOT excluded: a
 fast function is usually vectorisable, so it belongs in `vec` (one call for a
 whole axis, not a million loop points), and the store-less mode removes
-bookkeeping cost entirely. For a cheap, scalar-only, very-many-point sweep
+bookkeeping cost entirely. Cost and vectorisability are two axes, not one,
+and a callee that is expensive *and* vectorised belongs in `batch`, which
+groups sweep points into one call without giving up dedup or resumption. For a cheap, scalar-only, very-many-point sweep
 that still needs persistence, execution buffers writes into coarse store
 chunks (see below), which keeps bookkeeping a small fraction of a real run
 even at large point counts.

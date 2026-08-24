@@ -7,15 +7,28 @@ the contract already names everything.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
+import numpy as np
 import xarray as xr
 
 from .contract import Contract
 from .errors import ContractError
 
-__all__ = ["assemble_args", "normalise_return"]
+__all__ = [
+    "GROUP_DIM",
+    "assemble_args",
+    "assemble_group_args",
+    "normalise_return",
+    "split_group_return",
+]
+
+#: Dim a batched call stacks its points along, in both directions: the
+#: arguments arrive over it and the return is cut back along it.  Reserved
+#: rather than configurable, so that reading a batched callable never
+#: requires looking up which name this sweep happened to choose.
+GROUP_DIM = "point"
 
 
 def assemble_args(
@@ -127,3 +140,103 @@ def _as_dataarray(value: Any, name: str) -> xr.DataArray:
     """Coerce one returned value to a named DataArray."""
     array = value if isinstance(value, xr.DataArray) else xr.DataArray(value)
     return array.rename(name)
+
+
+def assemble_group_args(
+    contract: Contract,
+    *,
+    group_values: Sequence[Mapping[str, Any]],
+    arrays: Mapping[str, xr.DataArray],
+    statics: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build the keyword arguments for one batched call.
+
+    Batched loop variables arrive as 1-D arrays over :data:`GROUP_DIM`, one
+    entry per point of the group and aligned across variables, so that
+    position ``i`` of every batched argument describes the same point.
+    Scalar-delivered loop variables are shared by the whole group and so
+    arrive as they always do.
+
+    Parameters
+    ----------
+    contract
+        The contract naming every argument.
+    group_values
+        Loop values for each point of the group, in order.
+    arrays
+        Vec and const variables, as for a single call.
+    statics
+        Configuration forwarded verbatim to every call.
+
+    Returns
+    -------
+    dict
+        Keyword arguments, ready to splat into the wrapped callable.
+
+    Raises
+    ------
+    ContractError
+        If a scalar-delivered loop variable does not hold one value across
+        the group, which would make the group ambiguous.
+    """
+    args: dict[str, Any] = {}
+    for loop_var in contract.loop:
+        values = [point[loop_var.name] for point in group_values]
+        if loop_var.deliver == "batch":
+            args[loop_var.name] = xr.DataArray(np.asarray(values), dims=[GROUP_DIM])
+            continue
+        distinct = set(values)
+        if len(distinct) > 1:
+            raise ContractError(
+                f"loop variable {loop_var.name!r} takes {len(distinct)} "
+                "values across one batched group; group only points that "
+                "share it, or declare it in the batch clause too"
+            )
+        value = values[0]
+        args[loop_var.name] = (
+            xr.DataArray(value) if loop_var.deliver == "array" else value
+        )
+    for vec_var in contract.vec:
+        args[vec_var.name] = arrays[vec_var.name]
+    for const_var in contract.const:
+        args[const_var.name] = arrays[const_var.name]
+    args.update(statics)
+    return args
+
+
+def split_group_return(result: xr.Dataset, size: int) -> list[xr.Dataset]:
+    """Cut one batched call's return into one Dataset per point.
+
+    Parameters
+    ----------
+    result
+        What the callable returned, already normalised, carrying
+        :data:`GROUP_DIM` on every output.
+    size
+        Number of points the group held.
+
+    Returns
+    -------
+    list[xr.Dataset]
+        One Dataset per point, in group order, with the group dim dropped
+        so that each looks exactly like an unbatched call's return.
+
+    Raises
+    ------
+    ContractError
+        If an output lacks the group dim or disagrees with the group size.
+    """
+    for name, var in result.data_vars.items():
+        if GROUP_DIM not in var.dims:
+            dims = ", ".join(map(str, var.dims)) or "none"
+            raise ContractError(
+                f"batched call returned {name!r} without a {GROUP_DIM!r} dim "
+                f"(dims: {dims}); a batched callable stacks its results along "
+                f"{GROUP_DIM!r}, one entry per point it was handed"
+            )
+        if var.sizes[GROUP_DIM] != size:
+            raise ContractError(
+                f"batched call was handed {size} point(s) but returned "
+                f"{var.sizes[GROUP_DIM]} along {GROUP_DIM!r} for {name!r}"
+            )
+    return [result.isel({GROUP_DIM: i}, drop=True) for i in range(size)]

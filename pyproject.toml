@@ -1,6 +1,6 @@
 [project]
 name = "xsweep"
-version = "0.3.0"
+version = "0.4.0"
 description = "Minimal, content-agnostic parameter sweeps for xarray."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -99,8 +99,16 @@ matplotlib = "*"
 [tool.pixi.feature.docs.tasks]
 docs-build = "sphinx-build -b html docs docs/_build/html"
 
+# Kept out of `dev` so a release build pulls nothing a test run needs.
+[tool.pixi.feature.build.dependencies]
+python-build = "*"
+
+[tool.pixi.feature.build.tasks]
+build = "python -m build"
+
 [tool.pixi.environments]
 default = { solve-group = "default" }
+build = { features = ["build"], solve-group = "default" }
 dev = { features = ["dev"], solve-group = "default" }
 docs = { features = ["docs"], solve-group = "default" }
 

@@ -1,3 +1,55 @@
+## [0.4.0] - 2026-08-24
+
+### Build
+
+- Scaffold the sphinx-gallery example site ([e489cf1](https://github.com/walcark/xsweep/commit/e489cf1f6d09a818d345afb99958ab90b7b96989))
+- Add matplotlib to the dev pixi feature ([11c76a6](https://github.com/walcark/xsweep/commit/11c76a63e7c87500960e79d65b875058eeddd4cf))
+- Rebuild the docs site on shibuya, with the guide and reference on it ([de8a2b6](https://github.com/walcark/xsweep/commit/de8a2b6ff35d55e9ea93ba0f2623e7bc718546f3))
+
+### CI
+
+- Deploy the example gallery to GitHub Pages, link it from the docs ([700cd3e](https://github.com/walcark/xsweep/commit/700cd3e58fb5f220ac717210657913c782f2eff9))
+- Release to pypi on tag push, guarded by the version and the gate ([3181afc](https://github.com/walcark/xsweep/commit/3181afcea280c0181acb3fd10d4c235dd3504130))
+
+### Documentation
+
+- Rebuild the gallery around an engine that cannot be vectorised ([294b1a4](https://github.com/walcark/xsweep/commit/294b1a4cee354879d37aa4fcc95e6557765f4d76))
+- Add gallery page 02, the store as cache and resume path ([947528b](https://github.com/walcark/xsweep/commit/947528b6533346de80e1ca92249a7609be6ad291))
+- Add gallery page 03, zip against product ([1b95e8a](https://github.com/walcark/xsweep/commit/1b95e8aa9df804648a6b483fa79e10a35ce67682))
+- Add gallery page 04, deduplication on a scene ([ea3e413](https://github.com/walcark/xsweep/commit/ea3e413e4bf6ed0c25f2bb2740faeb6059995c3c))
+- Add gallery page 05, handing over a whole spectrum with vec ([769cbad](https://github.com/walcark/xsweep/commit/769cbadfdd6b63530a0ddff7f8343a7f2b918ff2))
+- Add gallery page 06, const and the axis that must not be cut ([da1eeea](https://github.com/walcark/xsweep/commit/da1eeeaae52dbc5fcfbe6d961d4018fc99b94d6a))
+- Add gallery page 07, policy changes cost and never the result ([56a6c9d](https://github.com/walcark/xsweep/commit/56a6c9d7618392e23524ed5fdc36b59b3ae6d1ef))
+- Add gallery page 08, SweepModule and state built once ([5a8bc0b](https://github.com/walcark/xsweep/commit/5a8bc0b63fecc05cc944e39da415cedad6c34ca0))
+- Add gallery page 09, recording, retrying and resuming failures ([844b0d3](https://github.com/walcark/xsweep/commit/844b0d33fcee955ab366e4a7ca6212b56f5902d2))
+- Add gallery page 10, replication through a seed variable ([b21c19c](https://github.com/walcark/xsweep/commit/b21c19c94adb57b6be164408bf95828560a90f7c))
+- Rework the guide into site pages, reframed on the case xsweep is for ([8cb5f61](https://github.com/walcark/xsweep/commit/8cb5f6166831cfa0a591d5b92500516d8c6decfe))
+- Cut the README down to a pointer at the site ([1cc1009](https://github.com/walcark/xsweep/commit/1cc1009aa0370d717649642b8794fd9f38b9e065))
+
+### Features
+
+- Add benchmarks harness plumbing ([fd7d921](https://github.com/walcark/xsweep/commit/fd7d921c2d67ff69aa3801f2f741bdc0d94c9b1e))
+- Add benchmark case 1, Beer-Lambert transmission ([bc5ee47](https://github.com/walcark/xsweep/commit/bc5ee47e9509c8857e482b5bdc2df2318345fc8b))
+- Add benchmark case 2, Rayleigh optical depth spectrum ([397f8bd](https://github.com/walcark/xsweep/commit/397f8bd049fb429bf18265c9a57ea58201a28e8c))
+- Add benchmark case 3, dedup on a pixel map with a store ([edba768](https://github.com/walcark/xsweep/commit/edba7689376a68d916ad0b84927106040bca30de))
+- Add benchmark case 4, band integration against synthetic SRFs ([1415345](https://github.com/walcark/xsweep/commit/1415345a5273ce112ab8f380cad82c0d3507d4c9))
+- Add benchmark case 5, TOA reflectance over a big grid ([3bc38ee](https://github.com/walcark/xsweep/commit/3bc38ee21990030a70b49ced9f4863f3d233da2a))
+- Add benchmark case 6, Henyey-Greenstein phase function ([16fc2f1](https://github.com/walcark/xsweep/commit/16fc2f1c46790d0ded80e58447802bb48bd5f954))
+- Add benchmark case 7, hyperspectral cube dedup at scale ([c318bc3](https://github.com/walcark/xsweep/commit/c318bc315384c34f5be51b94c4135780ff4f888b))
+- Add benchmark case 8, Monte-Carlo ensemble over seed ([36545df](https://github.com/walcark/xsweep/commit/36545df63790c35dcee513462bd4d5da28632d8e))
+- Add benchmark case 9, LUT + SweepModule + process executor ([35b8bc5](https://github.com/walcark/xsweep/commit/35b8bc55808d4503ac0d292d6fd76b15905c4dfd))
+- Add benchmark case 10, resume after interruption ([805773d](https://github.com/walcark/xsweep/commit/805773d22125fe45f54090e56cbbb3c6b5df20f1))
+- Add the benchmark evolution page and refresh recorded results ([133dd6b](https://github.com/walcark/xsweep/commit/133dd6be513630f62287a39b3039f976910521d5))
+- Add the radiative-transfer solvers the gallery will run on ([9eb4eb0](https://github.com/walcark/xsweep/commit/9eb4eb0112fdbc82a218ba499c47a58585a1c02a))
+- Deliver loop variables a group at a time with the batch clause ([2ec741f](https://github.com/walcark/xsweep/commit/2ec741fea70e68b77379928f52266a7ff77b0693))
+
+### Fixes
+
+- Anchor the gallery ignore pattern to the start of the file name ([64b1b8b](https://github.com/walcark/xsweep/commit/64b1b8b9258ce19a3f50e74412ff4647b4b5f35c))
+
+### Refactoring
+
+- Split the frozen benchmark cases from the example gallery ([474ddf0](https://github.com/walcark/xsweep/commit/474ddf08b5eb6d7d0fb48df4aed622d402654fc1))
 ## [0.3.0] - 2026-07-30
 
 ### Chores
@@ -8,6 +60,7 @@
 ### Documentation
 
 - Regenerate CHANGELOG.md ([3036027](https://github.com/walcark/xsweep/commit/3036027921ffd7381394e3d760c10d1102c8244d))
+- Regenerate CHANGELOG.md for v0.3.0 ([6f9eabd](https://github.com/walcark/xsweep/commit/6f9eabdd9cf48b7e8842363f6f54e5833c89bd44))
 
 ### Features
 
