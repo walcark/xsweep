@@ -1,0 +1,70 @@
+name: Publish to PyPI
+
+# Pushing an annotated tag is the whole release. This checks that the tag
+# agrees with the declared version, runs the gate, builds, publishes, then
+# opens the GitHub release. Publishing never happens on a red gate: a tag
+# can be pushed from a branch, or before CI has finished on main, so the
+# release path repeats the checks rather than assuming them.
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Tag must match the declared version
+        run: |
+          version=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match" \
+                 "pyproject version $version" >&2
+            exit 1
+          fi
+          echo "tag $GITHUB_REF_NAME matches version $version"
+
+  gate:
+    needs: check-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: prefix-dev/setup-pixi@v0.10.0
+        with:
+          pixi-version: v0.77.1
+          environments: dev
+      - name: fmt, lint, type-check, test
+        run: pixi run -e dev all
+
+  build-and-publish:
+    needs: [check-version, gate]
+    runs-on: ubuntu-latest
+    environment: pypi
+
+    # Trusted publishing: PyPI verifies this workflow's identity, so no
+    # API token is stored anywhere. `contents: write` is for the release.
+    permissions:
+      id-token: write
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: prefix-dev/setup-pixi@v0.10.0
+        with:
+          pixi-version: v0.77.1
+          environments: build
+
+      - name: Build the sdist and the wheel
+        run: pixi run -e build build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+
+      - name: Create the GitHub release
+        run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -15,6 +15,8 @@ Semantics come from xarray, not from a second description: variables sharing
 a dim vary together, variables on distinct dims multiply.
 """
 
+from importlib.metadata import version
+
 from .contract import Contract, LoopVar, OutVar, VecVar
 from .errors import (
     ContractError,
@@ -48,4 +50,7 @@ __all__ = [
     "XsweepError",
     "sweep",
 ]
-__version__ = "0.3.0"
+# Read from the installed metadata rather than repeated here: two places
+# declaring one version is two places to forget, and the release workflow
+# already checks the tag against pyproject.toml.
+__version__ = version("xsweep")
