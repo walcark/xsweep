@@ -1,3 +1,8 @@
+## [0.4.1] - 2026-08-25
+
+### Fixes
+
+- Report the probe's own error instead of an allocation failure ([86d0d65](https://github.com/walcark/xsweep/commit/86d0d655a256ef14f71566ef9269c035124de50e))
 ## [0.4.0] - 2026-08-24
 
 ### Build
@@ -10,6 +15,10 @@
 
 - Deploy the example gallery to GitHub Pages, link it from the docs ([700cd3e](https://github.com/walcark/xsweep/commit/700cd3e58fb5f220ac717210657913c782f2eff9))
 - Release to pypi on tag push, guarded by the version and the gate ([3181afc](https://github.com/walcark/xsweep/commit/3181afcea280c0181acb3fd10d4c235dd3504130))
+
+### Chores
+
+- Release 0.4.0 ([bec4254](https://github.com/walcark/xsweep/commit/bec42543c5235c33b08a88a099bd4f7ddb7cf71c))
 
 ### Documentation
 
