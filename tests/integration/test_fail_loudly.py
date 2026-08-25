@@ -155,3 +155,27 @@ def test_every_refusal_shares_one_base_class() -> None:
     """Users catch one thing; the subclass says which phase to fix."""
     for error in (ContractError, SpaceError, PolicyError, StoreError):
         assert issubclass(error, XsweepError)
+
+
+def test_a_failed_probe_names_its_own_cause() -> None:
+    """A probe that raises must not surface as a contract problem.
+
+    The store cannot be allocated without the output shape, so the run
+    stops either way.  What matters is which error the reader sees: the
+    allocation message sends them to fix a declaration that was never
+    wrong, while the probe's own exception says what actually broke.
+    """
+    import numpy as np
+    import xarray as xr
+
+    from xsweep import SweepPolicy, sweep
+    from xsweep.errors import StoreError
+
+    @sweep("loop(aot) -> field(y, x)")
+    def f(aot: float) -> xr.DataArray:
+        raise RuntimeError("the engine said no")
+
+    space = xr.Dataset({"aot": ("aot", np.array([0.1, 0.4]))})
+
+    with pytest.raises(StoreError, match="the engine said no"):
+        f(space, policy=SweepPolicy(on_error="nan"))
