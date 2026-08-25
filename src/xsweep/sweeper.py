@@ -28,7 +28,7 @@ from .delivery import (
     normalise_return,
     split_group_return,
 )
-from .errors import ContractError, PointFailed, PolicyError
+from .errors import ContractError, PointFailed, PolicyError, StoreError
 from .executors import build_executor
 from .lock import StoreLock
 from .plan import Plan, WorkItem, build_plan
@@ -307,8 +307,18 @@ def _run(plan: Plan, target: Sweeper) -> xr.Dataset:
         # read after the split, so the group dim never reaches the store.
         probe = _call_group(plan, target, _groups(plan, runnable)[0])
         first = probe[0].data
-        if first is not None:
-            sizes.update({str(d): int(n) for d, n in first.sizes.items()})
+        if first is None:
+            # Without the probe there is no output shape, so the store
+            # cannot be allocated and the run cannot continue whatever
+            # `on_error` says.  Raising here, with the cause attached,
+            # keeps the failure where it happened: reported from the
+            # allocation instead, it reads as a contract problem and
+            # sends the reader to fix a declaration that was never wrong.
+            raise StoreError(
+                "the probe call failed, so the output shape is unknown: "
+                f"{probe[0].error}"
+            ) from probe[0].error
+        sizes.update({str(d): int(n) for d, n in first.sizes.items()})
 
     store = Store.open_or_create(plan, sizes=sizes)
     if plan.policy.store is None:
