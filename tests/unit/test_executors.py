@@ -5,7 +5,12 @@ from __future__ import annotations
 import pytest
 
 from xsweep.errors import PolicyError
-from xsweep.executors import ProcessExecutor, SerialExecutor, build_executor
+from xsweep.executors import (
+    ProcessExecutor,
+    SerialExecutor,
+    ThreadExecutor,
+    build_executor,
+)
 
 
 def test_a_non_picklable_callable_is_refused_with_the_culprit_named() -> None:
@@ -63,3 +68,40 @@ def test_dask_executor_names_the_missing_extra() -> None:
         pytest.skip("dask is installed; the missing-extra message does not apply")
     with pytest.raises(PolicyError, match="optional dependency"):
         build_executor("dask")
+
+
+def test_thread_executor_runs_every_item() -> None:
+    """Results come back keyed by position, whatever the completion order."""
+    executor = ThreadExecutor(max_workers=4)
+
+    results = dict(executor.map_unordered(lambda x: x * 2, [1, 2, 3, 4]))
+
+    assert results == {0: 2, 1: 4, 2: 6, 3: 8}
+
+
+def test_thread_executor_accepts_a_closure() -> None:
+    """The reason it exists: a closure is not picklable, a thread needs it not
+    to be. The swept function is often a method or captures a loaded dataset,
+    which the process executor refuses."""
+    captured = {"n": 3}
+    executor = ThreadExecutor(max_workers=2)
+
+    results = dict(executor.map_unordered(lambda x: x * captured["n"], [1, 2]))
+
+    assert results == {0: 3, 1: 6}
+
+
+def test_process_executor_still_refuses_that_closure() -> None:
+    """The contrast the thread executor is there to resolve."""
+    captured = {"n": 3}
+
+    with pytest.raises(PolicyError, match="picklable"):
+        list(ProcessExecutor().map_unordered(lambda x: x * captured["n"], [1, 2]))
+
+
+def test_build_executor_resolves_thread() -> None:
+    """The name is reachable from a policy."""
+    built = build_executor("thread", max_workers=2)
+
+    assert isinstance(built, ThreadExecutor)
+    assert built.max_workers == 2

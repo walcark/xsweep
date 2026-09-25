@@ -9,12 +9,18 @@ foundation.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Sequence
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from typing import Any, Protocol, TypeVar
 
 from .errors import PolicyError
 
-__all__ = ["Executor", "ProcessExecutor", "SerialExecutor", "build_executor"]
+__all__ = [
+    "Executor",
+    "ProcessExecutor",
+    "SerialExecutor",
+    "ThreadExecutor",
+    "build_executor",
+]
 
 T = TypeVar("T")
 R = TypeVar("R")
@@ -94,16 +100,50 @@ class ProcessExecutor:
                 yield futures[future], future.result()
 
 
+class ThreadExecutor:
+    """Run calls in a thread pool.
+
+    Parameters
+    ----------
+    max_workers
+        Worker count; ``None`` leaves the runtime default.
+
+    Notes
+    -----
+    For a callee that releases the GIL: a subprocess, a C extension, a wait
+    on I/O. Nothing is pickled, so a closure over live objects runs here
+    where the process executor refuses it, which is the usual shape when the
+    swept function is a method or captures a loaded dataset. A callee that
+    holds the GIL gains nothing from this executor.
+    """
+
+    def __init__(self, max_workers: int | None = None) -> None:
+        self.max_workers = max_workers
+
+    def map_unordered(
+        self, fn: Callable[[T], R], items: Sequence[T]
+    ) -> Iterator[tuple[int, R]]:
+        """Apply ``fn`` to each item across worker threads."""
+        from concurrent.futures import as_completed
+
+        with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
+            futures = {
+                pool.submit(fn, item): position for position, item in enumerate(items)
+            }
+            for future in as_completed(futures):
+                yield futures[future], future.result()
+
+
 def build_executor(spec: str | Any, *, max_workers: int | None = None) -> Executor:
     """Turn a policy value into an executor.
 
     Parameters
     ----------
     spec
-        ``"serial"``, ``"process"``, ``"dask"``, or an object already
-        satisfying the protocol.
+        ``"serial"``, ``"thread"``, ``"process"``, ``"dask"``, or an object
+        already satisfying the protocol.
     max_workers
-        Worker count, honoured by the process executor.
+        Worker count, honoured by the thread and process executors.
 
     Returns
     -------
@@ -125,13 +165,15 @@ def build_executor(spec: str | Any, *, max_workers: int | None = None) -> Execut
         return custom
     if spec == "serial":
         return SerialExecutor()
+    if spec == "thread":
+        return ThreadExecutor(max_workers)
     if spec == "process":
         return ProcessExecutor(max_workers)
     if spec == "dask":
         return _build_dask_executor(max_workers)
     raise PolicyError(
-        f"unknown executor {spec!r}; expected 'serial', 'process', 'dask', or "
-        "an object exposing map_unordered"
+        f"unknown executor {spec!r}; expected 'serial', 'thread', 'process', "
+        "'dask', or an object exposing map_unordered"
     )
 
 

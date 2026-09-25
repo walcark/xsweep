@@ -557,8 +557,8 @@ def _call_signature(
 def _render_executor(policy: ResolvedPolicy) -> str:
     """Render the executor as a short human-readable string."""
     if isinstance(policy.executor, str):
-        if policy.executor == "process" and policy.max_workers is not None:
-            return f"process(max_workers={policy.max_workers})"
+        if policy.executor in ("thread", "process") and policy.max_workers is not None:
+            return f"{policy.executor}(max_workers={policy.max_workers})"
         return policy.executor
     return type(policy.executor).__name__
 

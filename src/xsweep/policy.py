@@ -74,10 +74,10 @@ class SweepPolicy:
     dedup
         ``True`` deduplicates over every loop dim, a tuple over the named ones.
     executor
-        ``"serial"``, ``"process"``, or an object satisfying the executor
-        protocol.
+        ``"serial"``, ``"thread"``, ``"process"``, or an object satisfying
+        the executor protocol.
     max_workers
-        Worker count for the process executor.
+        Worker count for the thread and process executors.
     on_error
         ``"nan"`` records a failure and continues, ``"raise"`` fails fast.
     retries
