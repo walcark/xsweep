@@ -1,6 +1,6 @@
 [project]
 name = "xsweep"
-version = "0.4.1"
+version = "0.5.0"
 description = "Minimal, content-agnostic parameter sweeps for xarray."
 readme = "README.md"
 requires-python = ">=3.11"
