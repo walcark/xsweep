@@ -250,12 +250,6 @@ The complete documentation, examples, and API reference are available at:
 
 **v0 — experimental**
 
-xsweep is currently driven by several scientific use cases:
-
-- **adjeff** — Smart-G parameter sweeps, replacing its internal `SweepBundle` and `UniqueIndex` machinery;
-- **radtrans** — the engine-agnostic part of its sweep layer;
-- **Earth observation** — small and medium-sized sensitivity studies.
-
 The API is still evolving, but the core design is intentionally small:
 
 > **describe the computation, provide the parameter space, and let xsweep manage execution state.**
